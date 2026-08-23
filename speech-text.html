@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Speech API - Full Feature Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 600px;
+            margin: 30px auto;
+            padding: 20px;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        h2 { margin-top: 0; color: #111; }
+        .form-group {
+            margin-bottom: 18px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+        textarea, select {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 15px;
+        }
+        textarea { height: 80px; resize: vertical; }
+        .range-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        input[type="range"] { flex: 1; }
+        .value-display { font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
+        .button-group {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 10px;
+            margin-top: 25px;
+        }
+        button {
+            padding: 12px;
+            border-radius: 6px;
+            border: none;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        #speak-btn { background-color: #007bff; color: white; }
+        #pause-btn { background-color: #ffc107; color: #000; }
+        #resume-btn { background-color: #28a745; color: white; }
+        #cancel-btn { background-color: #dc3545; color: white; }
+        .status-badge {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            background: #e4e6eb;
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Web Speech API Controls</h2>
+    
+    <div class="form-group">
+        <label for="text-input">Text Utterance</label>
+        <textarea id="text-input">This tests every available property and controller on the Speech Synthesis interface offline.</textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="voice-select">Voice (SpeechSynthesisUtterance.voice)</label>
+        <select id="voice-select">
+            <option value="">Loading system voices...</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="rate-input">Speed Rate (SpeechSynthesisUtterance.rate)</label>
+        <div class="range-container">
+            <input type="range" id="rate-input" min="0.1" max="10" step="0.1" value="1">
+            <span class="value-display" id="rate-val">1.0x</span>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="pitch-input">Pitch Tone (SpeechSynthesisUtterance.pitch)</label>
+        <div class="range-container">
+            <input type="range" id="pitch-input" min="0" max="2" step="0.1" value="1">
+            <span class="value-display" id="pitch-val">1.0</span>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="volume-input">Audio Volume (SpeechSynthesisUtterance.volume)</label>
+        <div class="range-container">
+            <input type="range" id="volume-input" min="0" max="1" step="0.1" value="1">
+            <span class="value-display" id="volume-val">1.0</span>
+        </div>
+    </div>
+
+    <div class="button-group">
+        <button id="speak-btn">Speak</button>
+        <button id="pause-btn">Pause</button>
+        <button id="resume-btn">Resume</button>
+        <button id="cancel-btn">Stop</button>
+    </div>
+
+    <div class="status-badge" id="status-display">Status: Idle</div>
+</div>
+
+<script>
+    const synth = window.speechSynthesis;
+    
+    // UI Elements
+    const textInput = document.getElementById('text-input');
+    const voiceSelect = document.getElementById('voice-select');
+    const rateInput = document.getElementById('rate-input');
+    const pitchInput = document.getElementById('pitch-input');
+    const volumeInput = document.getElementById('volume-input');
+    
+    const rateVal = document.getElementById('rate-val');
+    const pitchVal = document.getElementById('pitch-val');
+    const volumeVal = document.getElementById('volume-val');
+    
+    const speakBtn = document.getElementById('speak-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    const resumeBtn = document.getElementById('resume-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const statusDisplay = document.getElementById('status-display');
+
+    let voices = [];
+
+    // Sync Slider Labels
+    rateInput.addEventListener('input', () => rateVal.textContent = `${parseFloat(rateInput.value).toFixed(1)}x`);
+    pitchInput.addEventListener('input', () => pitchVal.textContent = parseFloat(pitchInput.value).toFixed(1));
+    volumeInput.addEventListener('input', () => volumeVal.textContent = parseFloat(volumeInput.value).toFixed(1));
+
+    // Populate Voice Selection Menu
+    function populateVoiceList() {
+        voices = synth.getVoices();
+        voiceSelect.innerHTML = '';
+
+        voices.forEach((voice) => {
+            const option = document.createElement('option');
+            option.textContent = `${voice.name} (${voice.lang}) ${voice.localService ? '[Offline]' : '[Cloud]'}`;
+            option.setAttribute('data-name', voice.name);
+            voiceSelect.appendChild(option);
+        });
+    }
+
+    populateVoiceList();
+    if (synth.onvoiceschanged !== undefined) {
+        synth.onvoiceschanged = populateVoiceList;
+    }
+
+    // Trigger Playback
+    speakBtn.addEventListener('click', () => {
+        // Clear active/queued speech instances
+        synth.cancel();
+
+        if (textInput.value.trim() === '') return;
+
+        // Instantiate new utterance object
+        const utterance = new SpeechSynthesisUtterance(textInput.value);
+
+        // Map configurable API properties
+        const selectedVoiceName = voiceSelect.selectedOptions[0]?.getAttribute('data-name');
+        utterance.voice = voices.find(v => v.name === selectedVoiceName);
+        utterance.rate = parseFloat(rateInput.value);
+        utterance.pitch = parseFloat(pitchInput.value);
+        utterance.volume = parseFloat(volumeInput.value);
+
+        // Bind Functional State Lifecycle Event Listeners
+        utterance.onstart = () => updateStatus("Speaking...");
+        utterance.onend = () => updateStatus("Finished/Idle");
+        utterance.onerror = (e) => updateStatus(`Error: ${e.error}`);
+        utterance.onpause = () => updateStatus("Paused");
+        utterance.onresume = () => updateStatus("Speaking...");
+
+        // Push utterance instance to utility queue
+        synth.speak(utterance);
+    });
+
+    // Control Instantiations
+    pauseBtn.addEventListener('click', () => {
+        if (synth.speaking && !synth.paused) {
+            synth.pause();
+        }
+    });
+
+    resumeBtn.addEventListener('click', () => {
+        if (synth.paused) {
+            synth.resume();
+        }
+    });
+
+    cancelBtn.addEventListener('click', () => {
+        synth.cancel();
+        updateStatus("Stopped/Idle");
+    });
+
+    function updateStatus(msg) {
+        statusDisplay.textContent = `Status: ${msg}`;
+    }
+</script>
+
+</body>
+</html>
