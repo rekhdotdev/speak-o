@@ -1,0 +1,6 @@
+.output/
+.wxt/
+coverage/
+node_modules/
+*.zip
+.DS_Store

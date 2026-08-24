@@ -1,0 +1,68 @@
+name: Extraction failure
+description: Report an Article, Selection, or highlighting failure without sharing sensitive content
+title: "Extraction: "
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Never paste a Provider Credential, private Article prose, generated audio, or an unsanitized page capture. Ordinary X posts and timelines require a Selection in 0.1.0.
+  - type: input
+    id: version
+    attributes:
+      label: Speak-O and Chrome versions
+      placeholder: Speak-O 0.1.0; Chrome 124
+    validations:
+      required: true
+  - type: dropdown
+    id: activation
+    attributes:
+      label: Activation route
+      options:
+        - Toolbar Article action
+        - Read keyboard command
+        - Selection context menu
+    validations:
+      required: true
+  - type: dropdown
+    id: extractor
+    attributes:
+      label: Expected extraction path
+      options:
+        - Generic Article
+        - X Article
+        - Explicit Selection
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened?
+      description: Describe visible behavior and the precise refusal or recovery message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Paste only output copied from Speak-O settings. Review it before submitting.
+      render: json
+  - type: textarea
+    id: fixture
+    attributes:
+      label: Synthetic or sanitized fixture details
+      description: Provide a minimal structure or public reproduction URL only if you are allowed to share it. Remove identifiers, prose, tokens, and unrelated content.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety confirmation
+      options:
+        - label: I did not include a Provider Credential, private prose, generated audio, or an unsanitized capture.
+          required: true

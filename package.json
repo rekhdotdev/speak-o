@@ -1,0 +1,49 @@
+{
+  "name": "speak-o",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open-source BYOK article reader for Chrome",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "postinstall": "wxt prepare",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:accessibility": "vitest run tests/accessibility",
+    "notices": "node scripts/generate-notices.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "audit:zip": "node scripts/audit-zip.mjs",
+    "verify": "npm run notices && npm run format:check && npm run typecheck && npm test && npm run build && npm run zip && npm run audit:zip"
+  },
+  "dependencies": {
+    "@mozilla/readability": "0.6.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.6",
+    "@types/chrome": "0.2.7",
+    "@types/node": "26.2.0",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "4.7.0",
+    "@wxt-dev/module-react": "1.2.2",
+    "axe-core": "4.13.0",
+    "fflate": "0.8.3",
+    "jsdom": "29.1.1",
+    "prettier": "3.9.6",
+    "typescript": "7.0.2",
+    "vite": "6.4.3",
+    "vitest": "4.1.11",
+    "wxt": "0.21.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

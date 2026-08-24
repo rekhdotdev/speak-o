@@ -1,0 +1,9 @@
+Speak-O
+Copyright 2026 Rekh
+
+This product is licensed under the Apache License, Version 2.0.
+
+"Speak-O" and "Rekh" are names and marks of Rekh. The Apache-2.0 license
+does not grant permission to use trade names, trademarks, service marks, or
+product names except as required for reasonable and customary description of
+the origin of the work and reproduction of this NOTICE file.

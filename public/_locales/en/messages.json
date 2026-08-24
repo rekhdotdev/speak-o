@@ -1,0 +1,19 @@
+{
+  "extensionName": {
+    "message": "Speak-O",
+    "description": "Extension name"
+  },
+  "extensionDescription": {
+    "message": "Open-source BYOK article reader for Chrome",
+    "description": "Chrome Web Store and extension-manager description"
+  },
+  "actionTitle": {
+    "message": "Read this Article with Speak-O"
+  },
+  "commandRead": {
+    "message": "Read the current Article or Selection"
+  },
+  "commandToggle": {
+    "message": "Play or pause the active Reading Session"
+  }
+}
