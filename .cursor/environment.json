@@ -1,0 +1,4 @@
+{
+  "name": "Speak-O",
+  "install": "npm ci"
+}
