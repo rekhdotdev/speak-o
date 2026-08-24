@@ -24,8 +24,21 @@ function isXPage(input: ExtractionInput): boolean {
 
 function kindFor(element: Element): NarratableBlockKind {
   const tag = element.tagName.toLowerCase();
-  if (/^h[1-6]$/.test(tag)) return "heading";
-  if (tag === "li") return "list-item";
+  const testId = element.getAttribute("data-testid") ?? "";
+  const className = element.getAttribute("class") ?? "";
+  if (
+    /^h[1-6]$/.test(tag) ||
+    testId === "longform-header" ||
+    /(?:^|\s)longform-header(?:-|\s|$)/.test(className)
+  ) {
+    return "heading";
+  }
+  if (
+    tag === "li" ||
+    /(?:^|\s)longform-(?:un)?ordered-list-item(?:\s|$)/.test(className)
+  ) {
+    return "list-item";
+  }
   if (tag === "blockquote") return "blockquote";
   if (tag === "figcaption") return "caption";
   return "paragraph";
@@ -55,10 +68,18 @@ export function extractXArticle(
 ): ExtractionResult | null {
   if (!isXPage(input)) return null;
 
-  const article = input.document.querySelector(
-    "article[data-testid='twitterArticleReadView']",
+  const publicArticleBody = input.document.querySelector(
+    "article .x-article-body > .contents, article .x-article-body .contents",
   );
-  if (!article) {
+  const richText =
+    input.document.querySelector(
+      "[data-testid='twitterArticleRichTextView'], [data-testid='longformRichTextComponent']",
+    ) ?? publicArticleBody;
+  const article =
+    input.document.querySelector("[data-testid='twitterArticleReadView']") ??
+    richText?.closest("article") ??
+    null;
+  if (!article || !richText) {
     return {
       ok: false,
       reason: "UNSUPPORTED_X_PAGE",
@@ -70,20 +91,52 @@ export function extractXArticle(
   }
 
   const titleElement = article.querySelector(
-    "[data-testid='twitterArticleTitle']",
+    "[data-testid='twitterArticleTitle'], [data-testid='twitter-article-title'], h1",
   );
   const authorElement = article.querySelector("[data-testid='User-Name']");
-  const richText = article.querySelector(
-    "[data-testid='twitterArticleRichTextView']",
-  );
   const blocks: NarratableBlock[] = [];
   const mappings: SourceMapping[] = [];
   const mappingNumber = { value: 1 };
 
   addMappedElement(titleElement, "title", blocks, mappings, mappingNumber);
   addMappedElement(authorElement, "author", blocks, mappings, mappingNumber);
-  richText
-    ?.querySelectorAll("h1, h2, h3, h4, h5, h6, p, li, blockquote, figcaption")
+  const blockSelector = [
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "p",
+    "li",
+    "blockquote",
+    "figcaption",
+    "[data-testid='longform-header']",
+    "[class~='longform-unstyled']",
+    "[class~='public-DraftStyleDefault-block']",
+    "[class~='longform-unordered-list-item']",
+    "[class~='longform-ordered-list-item']",
+    "[class*='longform-header-']",
+  ].join(", ");
+  const candidates = Array.from(richText.querySelectorAll(blockSelector));
+  const duplicateContainers = new Set<Element>();
+  for (const element of candidates) {
+    const ancestor = element.parentElement?.closest(blockSelector);
+    if (
+      ancestor &&
+      richText.contains(ancestor) &&
+      ancestor.textContent?.trim() === element.textContent?.trim()
+    ) {
+      duplicateContainers.add(ancestor);
+    }
+  }
+  candidates
+    .filter(
+      (element) =>
+        element !== titleElement &&
+        element !== authorElement &&
+        !duplicateContainers.has(element),
+    )
     .forEach((element) => {
       addMappedElement(
         element,
@@ -101,7 +154,7 @@ export function extractXArticle(
   if (characterCount > 500_000 || blocks.length > 20_000) {
     return { ok: false, reason: "ARTICLE_TOO_LARGE", extractor: "x-articles" };
   }
-  if (!richText || blocks.length < 3 || mappings.length === 0) {
+  if (blocks.length < 3 || mappings.length === 0) {
     return { ok: false, reason: "MAPPING_INCOMPLETE", extractor: "x-articles" };
   }
 

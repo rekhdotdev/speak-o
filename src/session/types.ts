@@ -94,6 +94,10 @@ export interface CommandContext {
 
 export type BrowserSpeechEvent =
   | { type: "start"; sentenceIndex: number }
+  | { type: "pause"; sentenceIndex: number }
+  | { type: "resume"; sentenceIndex: number }
+  | { type: "interrupted"; sentenceIndex: number }
+  | { type: "cancelled"; sentenceIndex: number }
   | { type: "word"; sentenceIndex: number; charIndex: number; length: number }
   | { type: "end"; sentenceIndex: number }
   | { type: "error"; sentenceIndex: number; errorCode: string };
@@ -128,6 +132,8 @@ export type ReadingSessionCommand =
       playbackSpeed: PlaybackSpeed;
     } & CommandContext)
   | ({ type: "set-highlights"; enabled: boolean } & CommandContext)
+  | ({ type: "settings.opened" } & CommandContext)
+  | ({ type: "settings.closed"; preferences: Preferences } & CommandContext)
   | ({ type: "source.changed" } & CommandContext)
   | ({ type: "continue-without-highlights" } & CommandContext)
   | ({ type: "continue-after-usage-limit" } & CommandContext)
@@ -156,6 +162,8 @@ export type ReadingSessionEffect =
   | ({ type: "browser.pause" } & EffectContext)
   | ({ type: "browser.resume" } & EffectContext)
   | ({ type: "provider.abort" } & EffectContext)
+  | ({ type: "provider.pause-prefetch" } & EffectContext)
+  | ({ type: "provider.resume-prefetch" } & EffectContext)
   | ({
       type: "provider.generate";
       requestId: string;
@@ -169,6 +177,7 @@ export type ReadingSessionEffect =
   | ({ type: "audio.pause" } & EffectContext)
   | ({ type: "audio.resume" } & EffectContext)
   | ({ type: "audio.set-rate"; playbackSpeed: PlaybackSpeed } & EffectContext)
+  | ({ type: "content.clear-highlights" } & EffectContext)
   | ({ type: "content.clear" } & EffectContext)
   | ({ type: "storage.clear-session" } & EffectContext)
   | ({ type: "offscreen.close" } & EffectContext)

@@ -28,6 +28,38 @@ function article(id: string, sentences: string[]): ArticleSnapshot {
 }
 
 describe("Reading Session interface", () => {
+  it("applies a Narration Language override and its matching Browser Voice", () => {
+    const controller = new ReadingSessionController(() => "session-language");
+    const activated = controller.dispatch({
+      type: "activate",
+      article: article("article-language", ["Bonjour. Salut."]),
+      sourceTabId: 7,
+      sourceFrameId: 0,
+      mode: "browser",
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        narrationLanguageOverride: "fr-FR",
+        browserVoiceByLanguage: { "fr-FR": "French Voice" },
+      },
+    });
+    expect(activated.snapshot).toMatchObject({
+      narrationLanguage: "fr-FR",
+      voiceId: "French Voice",
+    });
+
+    const playing = controller.dispatch({
+      type: "play",
+      sessionId: "session-language",
+      generationEpoch: 1,
+    });
+    expect(playing.effects).toContainEqual(
+      expect.objectContaining({
+        type: "browser.speak",
+        language: "fr-FR",
+        voiceId: "French Voice",
+      }),
+    );
+  });
   it("owns Browser Voice sentence progress and rejects stale asynchronous events", () => {
     const ids = ["session-a", "session-b"];
     const controller = new ReadingSessionController(
@@ -128,7 +160,127 @@ describe("Reading Session interface", () => {
     ]);
   });
 
-  it("applies sentence navigation, Browser Voice speed changes, and source-change recovery predictably", () => {
+  it("resumes paused media and starts paused sentence navigation immediately", () => {
+    const controller = new ReadingSessionController(() => "session-resume");
+    controller.dispatch({
+      type: "activate",
+      article: article("article-resume", ["One.", "Two.", "Three."]),
+      sourceTabId: 9,
+      sourceFrameId: 0,
+      mode: "browser",
+      preferences: DEFAULT_PREFERENCES,
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "session-resume",
+      generationEpoch: 1,
+    });
+
+    const paused = controller.dispatch({
+      type: "pause",
+      sessionId: "session-resume",
+      generationEpoch: 1,
+    });
+    expect(paused.effects).toContainEqual(
+      expect.objectContaining({ type: "browser.pause" }),
+    );
+
+    const resumed = controller.dispatch({
+      type: "play",
+      sessionId: "session-resume",
+      generationEpoch: 1,
+    });
+    expect(resumed.snapshot).toMatchObject({
+      status: "paused",
+      notice: "Resuming Chrome Voice…",
+    });
+    expect(resumed.effects).toContainEqual(
+      expect.objectContaining({ type: "browser.resume" }),
+    );
+    expect(
+      resumed.effects.some((effect) => effect.type === "browser.speak"),
+    ).toBe(false);
+
+    const resumeConfirmed = controller.dispatch({
+      type: "browser.event",
+      sessionId: "session-resume",
+      generationEpoch: 1,
+      event: { type: "resume", sentenceIndex: 0 },
+    });
+    expect(resumeConfirmed.snapshot).toMatchObject({
+      status: "playing",
+      notice: null,
+    });
+
+    controller.dispatch({
+      type: "pause",
+      sessionId: "session-resume",
+      generationEpoch: 1,
+    });
+    const next = controller.dispatch({
+      type: "next",
+      sessionId: "session-resume",
+      generationEpoch: 1,
+    });
+    expect(next.snapshot).toMatchObject({
+      status: "playing",
+      currentSentenceIndex: 1,
+    });
+    expect(next.effects).toContainEqual(
+      expect.objectContaining({ type: "browser.speak", sentenceIndex: 1 }),
+    );
+
+    controller.dispatch({
+      type: "pause",
+      sessionId: "session-resume",
+      generationEpoch: 1,
+    });
+    const previous = controller.dispatch({
+      type: "previous",
+      sessionId: "session-resume",
+      generationEpoch: 1,
+      elapsedInSentenceMs: 2_000,
+    });
+    expect(previous.snapshot).toMatchObject({
+      status: "playing",
+      currentSentenceIndex: 0,
+    });
+    expect(previous.effects).toContainEqual(
+      expect.objectContaining({ type: "browser.speak", sentenceIndex: 0 }),
+    );
+  });
+
+  it("pauses with an actionable state when Chrome unexpectedly cancels speech", () => {
+    const controller = new ReadingSessionController(() => "session-cancelled");
+    controller.dispatch({
+      type: "activate",
+      article: article("article-cancelled", ["One."]),
+      sourceTabId: 9,
+      sourceFrameId: 0,
+      mode: "browser",
+      preferences: DEFAULT_PREFERENCES,
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "session-cancelled",
+      generationEpoch: 1,
+    });
+
+    const cancelled = controller.dispatch({
+      type: "browser.event",
+      sessionId: "session-cancelled",
+      generationEpoch: 1,
+      event: { type: "cancelled", sentenceIndex: 0 },
+    });
+    expect(cancelled.snapshot).toMatchObject({
+      status: "paused",
+      notice:
+        "Chrome Voice stopped unexpectedly. Press play to restart the sentence.",
+      errorCode: "BROWSER_TTS_CANCELLED",
+    });
+  });
+
+  it("applies sentence navigation, immediate Browser Voice speed changes, and source-change recovery predictably", () => {
     const controller = new ReadingSessionController(() => "session-nav");
     controller.dispatch({
       type: "activate",
@@ -185,12 +337,18 @@ describe("Reading Session interface", () => {
     });
     expect(speedChanged.snapshot).toMatchObject({
       playbackSpeed: 2,
-      notice:
-        "Playback Speed applies at the next sentence in Browser Voice Mode.",
+      notice: null,
     });
-    expect(
-      speedChanged.effects.some((effect) => effect.type === "browser.speak"),
-    ).toBe(false);
+    expect(speedChanged.effects).toContainEqual(
+      expect.objectContaining({ type: "browser.stop" }),
+    );
+    expect(speedChanged.effects).toContainEqual(
+      expect.objectContaining({
+        type: "browser.speak",
+        sentenceIndex: 0,
+        playbackSpeed: 2,
+      }),
+    );
 
     const changed = controller.dispatch({
       type: "source.changed",
@@ -216,6 +374,58 @@ describe("Reading Session interface", () => {
         type: "browser.speak",
         playbackSpeed: 2,
       }),
+    );
+  });
+
+  it("repaints highlights immediately and clears them when narration completes", () => {
+    const controller = new ReadingSessionController(() => "session-highlight");
+    controller.dispatch({
+      type: "activate",
+      article: article("article-highlight", ["Only sentence."]),
+      sourceTabId: 10,
+      sourceFrameId: 0,
+      mode: "browser",
+      preferences: DEFAULT_PREFERENCES,
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "session-highlight",
+      generationEpoch: 1,
+    });
+
+    const hidden = controller.dispatch({
+      type: "set-highlights",
+      sessionId: "session-highlight",
+      generationEpoch: 1,
+      enabled: false,
+    });
+    expect(hidden.effects).toContainEqual(
+      expect.objectContaining({ type: "content.clear-highlights" }),
+    );
+
+    const shown = controller.dispatch({
+      type: "set-highlights",
+      sessionId: "session-highlight",
+      generationEpoch: 1,
+      enabled: true,
+    });
+    expect(shown.effects).toContainEqual(
+      expect.objectContaining({
+        type: "content.highlight",
+        sentenceIndex: 0,
+        word: null,
+      }),
+    );
+
+    const completed = controller.dispatch({
+      type: "browser.event",
+      sessionId: "session-highlight",
+      generationEpoch: 1,
+      event: { type: "end", sentenceIndex: 0 },
+    });
+    expect(completed.snapshot?.status).toBe("completed");
+    expect(completed.effects).toContainEqual(
+      expect.objectContaining({ type: "content.clear-highlights" }),
     );
   });
 

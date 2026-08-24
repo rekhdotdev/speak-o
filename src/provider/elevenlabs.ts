@@ -253,6 +253,8 @@ function websocketOrigin(region: ElevenLabsRegion): string {
 export class ElevenLabsTransport {
   private readonly sockets = new Set<WebSocketLike>();
   private readonly abortedSockets = new Set<WebSocketLike>();
+  private readonly continueBursts = new Map<WebSocketLike, () => void>();
+  private prefetchPaused = false;
 
   constructor(
     private readonly createSocket: WebSocketFactory = (url) =>
@@ -277,19 +279,35 @@ export class ElevenLabsTransport {
     let receivedAudio = false;
     let completed = false;
     let sentenceCursor = 0;
+    let nextSentenceToSend = 0;
     let generatedCharacters = 0;
 
+    const sendNextSentence = () => {
+      if (
+        completed ||
+        this.abortedSockets.has(socket) ||
+        (this.prefetchPaused && nextSentenceToSend > 0)
+      ) {
+        return;
+      }
+      const sentence = request.sentences[nextSentenceToSend];
+      if (!sentence) return;
+      socket.send(
+        JSON.stringify({
+          text: `${sentence.text} `,
+          ...(nextSentenceToSend === 0 ? { xi_api_key: credential } : {}),
+          flush: true,
+        }),
+      );
+      nextSentenceToSend += 1;
+      if (nextSentenceToSend >= request.sentences.length) {
+        socket.send(JSON.stringify({ text: "" }));
+      }
+    };
+    this.continueBursts.set(socket, sendNextSentence);
+
     socket.addEventListener("open", () => {
-      request.sentences.forEach((sentence, index) => {
-        socket.send(
-          JSON.stringify({
-            text: `${sentence.text} `,
-            ...(index === 0 ? { xi_api_key: credential } : {}),
-            flush: true,
-          }),
-        );
-      });
-      socket.send(JSON.stringify({ text: "" }));
+      sendNextSentence();
     });
 
     socket.addEventListener("message", (rawEvent) => {
@@ -324,12 +342,14 @@ export class ElevenLabsTransport {
           if (generatedCharacters >= sentenceBoundary) {
             generatedCharacters -= sentenceBoundary;
             sentenceCursor += 1;
+            sendNextSentence();
           }
         }
       }
       if (isFinal) {
         completed = true;
         this.sockets.delete(socket);
+        this.continueBursts.delete(socket);
       }
     });
 
@@ -337,6 +357,7 @@ export class ElevenLabsTransport {
       if (completed || this.abortedSockets.has(socket)) return;
       completed = true;
       this.sockets.delete(socket);
+      this.continueBursts.delete(socket);
       onEvent({
         type: "failure",
         requestId: request.requestId,
@@ -349,11 +370,21 @@ export class ElevenLabsTransport {
     socket.addEventListener("close", fail);
   }
 
+  pausePrefetch(): void {
+    this.prefetchPaused = true;
+  }
+
+  resumePrefetch(): void {
+    this.prefetchPaused = false;
+    for (const continueBurst of this.continueBursts.values()) continueBurst();
+  }
+
   abortAll(): void {
     for (const socket of this.sockets) {
       this.abortedSockets.add(socket);
       socket.close(1000, "Reading Session ended");
     }
     this.sockets.clear();
+    this.continueBursts.clear();
   }
 }

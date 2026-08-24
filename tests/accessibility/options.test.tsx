@@ -19,6 +19,7 @@ const chromeMock = {
     ]),
   },
   runtime: {
+    connect: vi.fn(() => ({ disconnect: vi.fn() })),
     sendMessage: vi.fn(async () => ({
       connection: { connected: false, remembered: false, maskedSuffix: null },
       metadata: { voices: [], models: [] },

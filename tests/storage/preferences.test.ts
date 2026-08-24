@@ -7,6 +7,7 @@ const expectedDefaults = {
   playbackSpeed: 1,
   voiceByLanguage: {},
   browserVoiceByLanguage: {},
+  narrationLanguageOverride: null,
   highlightsEnabled: true,
   followEnabled: true,
   theme: "system",
@@ -39,6 +40,7 @@ describe("PreferenceStore", () => {
     await store.save({
       ...expectedDefaults,
       playbackSpeed: 1.75,
+      narrationLanguageOverride: "fr-FR",
       theme: "dark",
       dock: "top",
       usageGuardCharacters: null,
@@ -46,6 +48,7 @@ describe("PreferenceStore", () => {
 
     await expect(store.load()).resolves.toMatchObject({
       playbackSpeed: 1.75,
+      narrationLanguageOverride: "fr-FR",
       theme: "dark",
       dock: "top",
       usageGuardCharacters: null,

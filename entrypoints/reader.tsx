@@ -21,7 +21,9 @@ const isolatedWindow = window as Window & { __speakOReaderMounted?: boolean };
 
 class CssHighlightRegistry implements HighlightRegistry {
   set(name: string, ranges: Range[]): void {
-    CSS.highlights.set(name, new Highlight(...ranges));
+    const highlight = new Highlight(...ranges);
+    highlight.priority = name === "speak-o-word" ? 2 : 1;
+    CSS.highlights.set(name, highlight);
   }
 
   delete(name: string): void {
@@ -50,13 +52,13 @@ function installPageHighlightStyles(): void {
       background-color: oklch(0.84 0.08 94 / 0.46);
     }
     ::highlight(speak-o-word) {
-      background-color: oklch(0.75 0.14 88 / 0.72);
+      background-color: oklch(0.64 0.17 83 / 0.88);
       text-decoration: underline 2px;
       text-underline-offset: 0.16em;
     }
     @media (prefers-color-scheme: dark) {
       ::highlight(speak-o-sentence) { background-color: oklch(0.52 0.08 88 / 0.46); }
-      ::highlight(speak-o-word) { background-color: oklch(0.65 0.13 88 / 0.62); }
+      ::highlight(speak-o-word) { background-color: oklch(0.7 0.15 84 / 0.82); }
     }
     @media (forced-colors: active) {
       ::highlight(speak-o-sentence) { background-color: Highlight; }
@@ -150,11 +152,14 @@ export default defineUnlistedScript(() => {
               command,
             };
             if (typeof value === "number") payload.value = value;
+            if (command === "close") {
+              void send(payload).finally(remove);
+              return;
+            }
             void send(payload);
           }}
           onOpenSettings={() => {
             void send({ type: "settings.open" });
-            void chrome.runtime.openOptionsPage();
           }}
         />,
       );
@@ -330,6 +335,8 @@ export default defineUnlistedScript(() => {
           endOffset: sentence.endOffset,
         });
         maybeFollow(sentence.mappingIds);
+      } else if (message.type === "content.clear-highlights") {
+        runtime.highlighter?.clear();
       } else if (message.type === "content.clear") {
         remove();
       }

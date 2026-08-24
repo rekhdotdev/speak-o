@@ -12,6 +12,7 @@ export interface Preferences {
   playbackSpeed: PlaybackSpeed;
   voiceByLanguage: Record<string, string>;
   browserVoiceByLanguage: Record<string, string>;
+  narrationLanguageOverride: string | null;
   highlightsEnabled: boolean;
   followEnabled: boolean;
   theme: Theme;
@@ -31,6 +32,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   playbackSpeed: 1,
   voiceByLanguage: {},
   browserVoiceByLanguage: {},
+  narrationLanguageOverride: null,
   highlightsEnabled: true,
   followEnabled: true,
   theme: "system",
@@ -71,6 +73,13 @@ function sanitizeVoices(value: unknown): Record<string, string> {
   ) as Record<string, string>;
 }
 
+function sanitizeLanguage(value: unknown): string | null {
+  return typeof value === "string" &&
+    /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(value)
+    ? value
+    : null;
+}
+
 export function sanitizePreferences(value: unknown): Preferences {
   const candidate = isRecord(value) ? value : {};
   const playbackSpeed = PLAYBACK_SPEEDS.includes(
@@ -91,6 +100,9 @@ export function sanitizePreferences(value: unknown): Preferences {
     playbackSpeed,
     voiceByLanguage: sanitizeVoices(candidate.voiceByLanguage),
     browserVoiceByLanguage: sanitizeVoices(candidate.browserVoiceByLanguage),
+    narrationLanguageOverride: sanitizeLanguage(
+      candidate.narrationLanguageOverride,
+    ),
     highlightsEnabled:
       typeof candidate.highlightsEnabled === "boolean"
         ? candidate.highlightsEnabled

@@ -34,6 +34,109 @@ function cloudArticle(): ArticleSnapshot {
 }
 
 describe("Cloud Voice Generation Window", () => {
+  it("suspends generation while speech settings are open and applies updates when they close", () => {
+    const controller = new ReadingSessionController(() => "session-settings");
+    controller.dispatch({
+      type: "activate",
+      article: cloudArticle(),
+      sourceTabId: 1,
+      sourceFrameId: 0,
+      mode: "cloud",
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        voiceByLanguage: { "en-US": "voice-old" },
+      },
+    });
+
+    const opened = controller.dispatch({
+      type: "settings.opened",
+      sessionId: "session-settings",
+      generationEpoch: 1,
+    });
+    expect(opened.effects).toContainEqual(
+      expect.objectContaining({ type: "provider.pause-prefetch" }),
+    );
+    const blocked = controller.dispatch({
+      type: "play",
+      sessionId: "session-settings",
+      generationEpoch: 1,
+    });
+    expect(blocked.snapshot).toMatchObject({
+      status: "paused",
+      notice: "Speech settings open; Cloud Voice preparation is paused.",
+    });
+    expect(
+      blocked.effects.some((effect) => effect.type === "provider.generate"),
+    ).toBe(false);
+
+    const closed = controller.dispatch({
+      type: "settings.closed",
+      sessionId: "session-settings",
+      generationEpoch: 1,
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        modelId: "model-new",
+        voiceByLanguage: { "en-US": "voice-new" },
+      },
+    });
+    expect(closed.effects).toContainEqual(
+      expect.objectContaining({ type: "provider.abort" }),
+    );
+    expect(closed.effects).toContainEqual(
+      expect.objectContaining({
+        type: "provider.generate",
+        voiceId: "voice-new",
+        modelId: "model-new",
+      }),
+    );
+  });
+
+  it("requires confirmation instead of regenerating in-flight audio after settings change", () => {
+    const controller = new ReadingSessionController(() => "session-in-flight");
+    controller.dispatch({
+      type: "activate",
+      article: cloudArticle(),
+      sourceTabId: 1,
+      sourceFrameId: 0,
+      mode: "cloud",
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        voiceByLanguage: { "en-US": "voice-old" },
+      },
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "session-in-flight",
+      generationEpoch: 1,
+    });
+    controller.dispatch({
+      type: "settings.opened",
+      sessionId: "session-in-flight",
+      generationEpoch: 1,
+    });
+
+    const closed = controller.dispatch({
+      type: "settings.closed",
+      sessionId: "session-in-flight",
+      generationEpoch: 1,
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        modelId: "model-new",
+        voiceByLanguage: { "en-US": "voice-new" },
+      },
+    });
+    expect(closed.snapshot).toMatchObject({
+      status: "provider-issue",
+      retryRequiresConfirmation: true,
+      errorCode: "SETTINGS_CHANGED_DURING_GENERATION",
+    });
+    expect(closed.effects.map((effect) => effect.type)).not.toContain(
+      "provider.resume-prefetch",
+    );
+    expect(closed.effects).toContainEqual(
+      expect.objectContaining({ type: "provider.abort" }),
+    );
+  });
   it("submits one bounded burst containing the current and no more than two upcoming sentences", () => {
     const controller = new ReadingSessionController(() => "cloud-session");
     controller.dispatch({
@@ -178,6 +281,74 @@ describe("Cloud Voice Generation Window", () => {
     );
     expect(JSON.stringify(received.effects)).not.toContain("credential");
     expect(JSON.stringify(received.effects)).not.toContain("apiKey");
+  });
+
+  it("resumes the existing Cloud Voice audio after a pause", () => {
+    const controller = new ReadingSessionController(() => "cloud-resume");
+    controller.dispatch({
+      type: "activate",
+      article: cloudArticle(),
+      sourceTabId: 11,
+      sourceFrameId: 0,
+      mode: "cloud",
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        voiceByLanguage: { "en-US": "voice-1" },
+      },
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "cloud-resume",
+      generationEpoch: 1,
+    });
+    controller.dispatch({
+      type: "provider.event",
+      sessionId: "cloud-resume",
+      generationEpoch: 1,
+      event: {
+        type: "audio",
+        sentenceIndex: 0,
+        audioBase64: "AQID",
+        alignment: null,
+        acknowledged: true,
+        isFinal: true,
+      },
+    });
+
+    const speedChanged = controller.dispatch({
+      type: "set-playback-speed",
+      sessionId: "cloud-resume",
+      generationEpoch: 1,
+      playbackSpeed: 1.5,
+    });
+    expect(speedChanged.effects).toContainEqual(
+      expect.objectContaining({
+        type: "audio.set-rate",
+        playbackSpeed: 1.5,
+      }),
+    );
+
+    const paused = controller.dispatch({
+      type: "pause",
+      sessionId: "cloud-resume",
+      generationEpoch: 1,
+    });
+    expect(paused.effects).toContainEqual(
+      expect.objectContaining({ type: "audio.pause" }),
+    );
+
+    const resumed = controller.dispatch({
+      type: "play",
+      sessionId: "cloud-resume",
+      generationEpoch: 1,
+    });
+    expect(resumed.snapshot?.status).toBe("playing");
+    expect(resumed.effects).toContainEqual(
+      expect.objectContaining({ type: "audio.resume" }),
+    );
+    expect(resumed.effects.some((effect) => effect.type === "audio.play")).toBe(
+      false,
+    );
   });
 
   it("retries only unacknowledged empty failures automatically", () => {

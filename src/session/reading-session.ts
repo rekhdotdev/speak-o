@@ -1,4 +1,6 @@
 import type { ArticleSnapshot } from "../extraction/types";
+import { segmentBlocks } from "../extraction/segmentation";
+import type { Preferences } from "../storage/preferences";
 import type {
   CommandContext,
   ReadingSessionCommand,
@@ -21,15 +23,44 @@ interface LastGeneration {
   region: import("../storage/preferences").Preferences["region"];
 }
 
+interface SpeechConfiguration {
+  narrationLanguage: string;
+  voiceId: string | null;
+  modelId: string;
+  region: Preferences["region"];
+}
+
 interface ActiveSession {
   article: ArticleSnapshot;
   snapshot: ReadingSessionSnapshot;
   browserVoiceId: string | null;
+  detectedNarrationLanguage: string;
   providerRegion: import("../storage/preferences").Preferences["region"];
   requestedSentenceIndices: Set<number>;
   bufferedAudio: Map<number, BufferedAudio>;
   lastGeneration: LastGeneration | null;
   retryCount: number;
+  canResumeMedia: boolean;
+  speechSettingsOpen: boolean;
+  resumeAfterSettings: boolean;
+  settingsConfigurationAtOpen: SpeechConfiguration | null;
+}
+
+const SETTINGS_PAUSED_NOTICE =
+  "Speech settings open; Cloud Voice preparation is paused.";
+
+function articleForPreferences(
+  article: ArticleSnapshot,
+  preferences: Preferences,
+): ArticleSnapshot {
+  const language =
+    preferences.narrationLanguageOverride ?? article.narrationLanguage;
+  if (language === article.narrationLanguage) return article;
+  return {
+    ...article,
+    narrationLanguage: language,
+    sentences: segmentBlocks(article.blocks, language),
+  };
 }
 
 function progressPercent(current: number, total: number): number {
@@ -123,9 +154,14 @@ export class ReadingSessionController {
           this.requireActive().snapshot.currentSentenceIndex + 1,
         );
       case "previous": {
-        const current = this.requireActive().snapshot.currentSentenceIndex;
+        const snapshot = this.requireActive().snapshot;
+        const current = snapshot.currentSentenceIndex;
         const destination =
-          command.elapsedInSentenceMs > 1_500 ? current : current - 1;
+          snapshot.status === "paused"
+            ? current - 1
+            : command.elapsedInSentenceMs > 1_500
+              ? current
+              : current - 1;
         return this.navigateTo(Math.max(0, destination));
       }
       case "seek":
@@ -134,6 +170,10 @@ export class ReadingSessionController {
         return this.setPlaybackSpeed(command.playbackSpeed);
       case "set-highlights":
         return this.setHighlights(command.enabled);
+      case "settings.opened":
+        return this.settingsOpened();
+      case "settings.closed":
+        return this.settingsClosed(command.preferences);
       case "source.changed":
         return this.sourceChanged();
       case "continue-without-highlights":
@@ -158,7 +198,8 @@ export class ReadingSessionController {
   private restore(
     command: Extract<ReadingSessionCommand, { type: "restore" }>,
   ): ReadingSessionTransition {
-    const { article, descriptor, preferences } = command;
+    const { descriptor, preferences } = command;
+    const article = articleForPreferences(command.article, preferences);
     const currentSentenceIndex = Math.min(
       Math.max(0, Math.trunc(descriptor.currentSentenceIndex)),
       Math.max(0, article.sentences.length - 1),
@@ -234,11 +275,16 @@ export class ReadingSessionController {
         preferences.browserVoiceByLanguage,
         language,
       ),
+      detectedNarrationLanguage: command.article.narrationLanguage,
       providerRegion: preferences.region,
       requestedSentenceIndices,
       bufferedAudio,
       lastGeneration: null,
       retryCount: 0,
+      canResumeMedia: false,
+      speechSettingsOpen: false,
+      resumeAfterSettings: false,
+      settingsConfigurationAtOpen: null,
     };
 
     return this.transition([
@@ -259,7 +305,8 @@ export class ReadingSessionController {
     const id = this.createId();
     const generationEpoch = this.nextGenerationEpoch;
     this.nextGenerationEpoch += 1;
-    const language = command.article.narrationLanguage;
+    const article = articleForPreferences(command.article, command.preferences);
+    const language = article.narrationLanguage;
     const snapshot: ReadingSessionSnapshot = {
       version: 1,
       id,
@@ -271,10 +318,10 @@ export class ReadingSessionController {
       mode: command.mode,
       currentSentenceIndex: 0,
       currentMediaTimeMs: 0,
-      sentenceCount: command.article.sentences.length,
+      sentenceCount: article.sentences.length,
       progressPercent: 0,
       estimatedRemainingSeconds: remainingSeconds(
-        command.article,
+        article,
         0,
         command.preferences.playbackSpeed,
       ),
@@ -300,17 +347,22 @@ export class ReadingSessionController {
       retryRequiresConfirmation: false,
     };
     this.active = {
-      article: command.article,
+      article,
       snapshot,
       browserVoiceId: preferredVoice(
         command.preferences.browserVoiceByLanguage,
         language,
       ),
+      detectedNarrationLanguage: command.article.narrationLanguage,
       providerRegion: command.preferences.region,
       requestedSentenceIndices: new Set(),
       bufferedAudio: new Map(),
       lastGeneration: null,
       retryCount: 0,
+      canResumeMedia: false,
+      speechSettingsOpen: false,
+      resumeAfterSettings: false,
+      settingsConfigurationAtOpen: null,
     };
 
     return this.transition([
@@ -327,10 +379,17 @@ export class ReadingSessionController {
       active.article.sentences[active.snapshot.currentSentenceIndex];
     if (!sentence) {
       active.snapshot = { ...active.snapshot, status: "completed" };
-      return this.transition([this.renderEffect(active.snapshot)]);
+      active.canResumeMedia = false;
+      return this.transition([
+        this.contextEffect(active.snapshot, {
+          type: "content.clear-highlights",
+        }),
+        this.renderEffect(active.snapshot),
+      ]);
     }
 
     active.snapshot = { ...active.snapshot, status: "playing", notice: null };
+    active.canResumeMedia = true;
     return this.transition([
       this.contextEffect(active.snapshot, {
         type: "browser.speak",
@@ -346,6 +405,28 @@ export class ReadingSessionController {
   }
 
   private play(): ReadingSessionTransition {
+    const active = this.requireActive();
+    if (active.snapshot.status === "paused" && active.canResumeMedia) {
+      active.snapshot = {
+        ...active.snapshot,
+        status:
+          active.snapshot.mode === "browser"
+            ? active.snapshot.status
+            : "playing",
+        notice:
+          active.snapshot.mode === "browser" ? "Resuming Chrome Voice…" : null,
+      };
+      return this.transition([
+        this.contextEffect(active.snapshot, {
+          type:
+            active.snapshot.mode === "browser"
+              ? "browser.resume"
+              : "audio.resume",
+        }),
+        this.renderEffect(active.snapshot),
+        this.saveDescriptorEffect(active.snapshot),
+      ]);
+    }
     return this.requireActive().snapshot.mode === "browser"
       ? this.playBrowser()
       : this.playCloud();
@@ -373,6 +454,7 @@ export class ReadingSessionController {
         notice: null,
         errorCode: null,
       };
+      active.canResumeMedia = true;
       return this.transition([
         this.contextEffect(active.snapshot, { type: "offscreen.ensure" }),
         this.contextEffect(active.snapshot, {
@@ -384,6 +466,18 @@ export class ReadingSessionController {
           startAtMs: active.snapshot.currentMediaTimeMs,
           preservesPitch: true,
         }),
+        this.renderEffect(active.snapshot),
+        this.saveDescriptorEffect(active.snapshot),
+      ]);
+    }
+    if (active.speechSettingsOpen) {
+      active.resumeAfterSettings = true;
+      active.snapshot = {
+        ...active.snapshot,
+        status: "paused",
+        notice: SETTINGS_PAUSED_NOTICE,
+      };
+      return this.transition([
         this.renderEffect(active.snapshot),
         this.saveDescriptorEffect(active.snapshot),
       ]);
@@ -443,6 +537,7 @@ export class ReadingSessionController {
       notice: "Preparing next sentence",
       errorCode: null,
     };
+    active.canResumeMedia = false;
     const lastIndex = candidates.at(-1)?.index ?? start;
     active.lastGeneration = {
       sentences: candidates,
@@ -542,6 +637,7 @@ export class ReadingSessionController {
       }),
     ];
     if (event.sentenceIndex === active.snapshot.currentSentenceIndex) {
+      active.canResumeMedia = true;
       effects.push(
         this.contextEffect(active.snapshot, { type: "offscreen.ensure" }),
         this.contextEffect(active.snapshot, {
@@ -599,6 +695,7 @@ export class ReadingSessionController {
       ]);
     }
     if (event.type === "error") {
+      active.canResumeMedia = false;
       active.snapshot = {
         ...active.snapshot,
         status: "provider-issue",
@@ -608,6 +705,7 @@ export class ReadingSessionController {
       return this.transition([this.renderEffect(active.snapshot)]);
     }
 
+    active.canResumeMedia = false;
     const nextIndex = event.sentenceIndex + 1;
     const minimumBufferedSentence = Math.max(0, nextIndex - 1);
     for (const sentenceIndex of active.bufferedAudio.keys()) {
@@ -624,6 +722,9 @@ export class ReadingSessionController {
         estimatedRemainingSeconds: 0,
       };
       return this.transition([
+        this.contextEffect(active.snapshot, {
+          type: "content.clear-highlights",
+        }),
         this.renderEffect(active.snapshot),
         this.saveDescriptorEffect(active.snapshot),
       ]);
@@ -729,7 +830,11 @@ export class ReadingSessionController {
       Math.max(0, Math.trunc(requestedIndex)),
       Math.max(0, active.article.sentences.length - 1),
     );
-    const wasPlaying = active.snapshot.status === "playing";
+    const shouldStartNarration =
+      active.snapshot.status === "playing" ||
+      active.snapshot.status === "paused" ||
+      active.snapshot.status === "completed";
+    active.canResumeMedia = false;
     active.snapshot = {
       ...active.snapshot,
       currentSentenceIndex: destination,
@@ -743,7 +848,7 @@ export class ReadingSessionController {
         destination,
         active.snapshot.playbackSpeed,
       ),
-      status: wasPlaying ? "playing" : "paused",
+      status: shouldStartNarration ? "playing" : "paused",
       notice: null,
     };
     const effects: ReadingSessionEffect[] = [
@@ -761,9 +866,10 @@ export class ReadingSessionController {
           active.requestedSentenceIndices.delete(sentenceIndex);
         }
       }
-      if (wasPlaying) {
+      if (shouldStartNarration) {
         const buffered = active.bufferedAudio.get(destination);
         if (buffered) {
+          active.canResumeMedia = true;
           effects.push(
             this.contextEffect(active.snapshot, { type: "offscreen.ensure" }),
             this.contextEffect(active.snapshot, {
@@ -787,9 +893,10 @@ export class ReadingSessionController {
       }
     }
 
-    if (wasPlaying && active.snapshot.mode === "browser") {
+    if (shouldStartNarration && active.snapshot.mode === "browser") {
       const sentence = active.article.sentences[destination];
       if (sentence) {
+        active.canResumeMedia = true;
         effects.push(
           this.contextEffect(active.snapshot, {
             type: "browser.speak",
@@ -821,10 +928,7 @@ export class ReadingSessionController {
         active.snapshot.currentSentenceIndex,
         playbackSpeed,
       ),
-      notice:
-        active.snapshot.mode === "browser"
-          ? "Playback Speed applies at the next sentence in Browser Voice Mode."
-          : null,
+      notice: null,
     };
     const effects: ReadingSessionEffect[] = [];
     if (active.snapshot.mode === "cloud") {
@@ -834,6 +938,28 @@ export class ReadingSessionController {
           playbackSpeed,
         }),
       );
+    } else if (active.snapshot.status === "playing") {
+      const sentence =
+        active.article.sentences[active.snapshot.currentSentenceIndex];
+      if (sentence) {
+        effects.push(
+          this.contextEffect(active.snapshot, { type: "browser.stop" }),
+          this.contextEffect(active.snapshot, {
+            type: "browser.speak",
+            sentenceIndex: active.snapshot.currentSentenceIndex,
+            text: sentence.text,
+            language: active.snapshot.narrationLanguage,
+            voiceId: active.snapshot.voiceId,
+            playbackSpeed,
+          }),
+        );
+        active.canResumeMedia = true;
+      }
+    } else if (active.snapshot.status === "paused" && active.canResumeMedia) {
+      effects.push(
+        this.contextEffect(active.snapshot, { type: "browser.stop" }),
+      );
+      active.canResumeMedia = false;
     }
     effects.push(
       this.renderEffect(active.snapshot),
@@ -851,7 +977,162 @@ export class ReadingSessionController {
         ? "Source Page highlighting enabled."
         : "Source Page highlighting hidden.",
     };
+    const highlightEffect: ReadingSessionEffect = enabled
+      ? this.contextEffect(active.snapshot, {
+          type: "content.highlight",
+          sentenceIndex: active.snapshot.currentSentenceIndex,
+          word: null,
+        })
+      : this.contextEffect(active.snapshot, {
+          type: "content.clear-highlights",
+        });
     return this.transition([
+      this.renderEffect(active.snapshot),
+      highlightEffect,
+      this.saveDescriptorEffect(active.snapshot),
+    ]);
+  }
+
+  private settingsOpened(): ReadingSessionTransition {
+    const active = this.requireActive();
+    active.speechSettingsOpen = true;
+    active.settingsConfigurationAtOpen = {
+      narrationLanguage: active.snapshot.narrationLanguage,
+      voiceId: active.snapshot.voiceId,
+      modelId: active.snapshot.modelId,
+      region: active.providerRegion,
+    };
+    return this.transition(
+      active.snapshot.mode === "cloud"
+        ? [
+            this.contextEffect(active.snapshot, {
+              type: "provider.pause-prefetch",
+            }),
+          ]
+        : [],
+    );
+  }
+
+  private settingsClosed(preferences: Preferences): ReadingSessionTransition {
+    const active = this.requireActive();
+    active.speechSettingsOpen = false;
+    active.providerRegion = preferences.region;
+    const narrationLanguage =
+      preferences.narrationLanguageOverride ?? active.detectedNarrationLanguage;
+    active.browserVoiceId = preferredVoice(
+      preferences.browserVoiceByLanguage,
+      narrationLanguage,
+    );
+    const voiceId = preferredVoice(
+      active.snapshot.mode === "browser"
+        ? preferences.browserVoiceByLanguage
+        : preferences.voiceByLanguage,
+      narrationLanguage,
+    );
+    const nextConfiguration: SpeechConfiguration = {
+      narrationLanguage,
+      voiceId,
+      modelId: preferences.modelId,
+      region: preferences.region,
+    };
+    const configurationChanged =
+      active.settingsConfigurationAtOpen !== null &&
+      (Object.keys(nextConfiguration) as Array<keyof SpeechConfiguration>).some(
+        (key) =>
+          active.settingsConfigurationAtOpen?.[key] !== nextConfiguration[key],
+      );
+    active.settingsConfigurationAtOpen = null;
+    active.snapshot = {
+      ...active.snapshot,
+      narrationLanguage,
+      modelId: preferences.modelId,
+      voiceId,
+      notice:
+        active.snapshot.mode === "cloud" && active.bufferedAudio.size > 0
+          ? "Buffered audio keeps its earlier Voice and Model."
+          : active.snapshot.notice === SETTINGS_PAUSED_NOTICE
+            ? null
+            : active.snapshot.notice,
+    };
+    const resumePrefetchEffects: ReadingSessionEffect[] =
+      active.snapshot.mode === "cloud"
+        ? [
+            this.contextEffect(active.snapshot, {
+              type: configurationChanged
+                ? "provider.abort"
+                : "provider.resume-prefetch",
+            }),
+          ]
+        : [];
+    if (active.snapshot.mode === "cloud" && configurationChanged) {
+      for (const sentenceIndex of active.requestedSentenceIndices) {
+        if (!active.bufferedAudio.has(sentenceIndex)) {
+          active.requestedSentenceIndices.delete(sentenceIndex);
+        }
+      }
+      const currentBuffered = active.bufferedAudio.has(
+        active.snapshot.currentSentenceIndex,
+      );
+      if (active.lastGeneration && !currentBuffered) {
+        if (!voiceId) {
+          active.lastGeneration = null;
+          active.resumeAfterSettings = false;
+          active.snapshot = {
+            ...active.snapshot,
+            status: "provider-issue",
+            notice: "Choose a compatible Voice before continuing Cloud Voice.",
+            errorCode: "VOICE_REQUIRED",
+            retryRequiresConfirmation: false,
+          };
+          return this.transition([
+            ...resumePrefetchEffects,
+            this.renderEffect(active.snapshot),
+            this.saveDescriptorEffect(active.snapshot),
+          ]);
+        }
+        const start = active.snapshot.currentSentenceIndex;
+        const sentences = active.article.sentences
+          .slice(start, start + 3)
+          .map((sentence, offset) => ({
+            index: start + offset,
+            text: sentence.text,
+          }));
+        sentences.forEach((sentence) =>
+          active.requestedSentenceIndices.add(sentence.index),
+        );
+        active.lastGeneration = {
+          sentences,
+          language: narrationLanguage,
+          voiceId,
+          modelId: preferences.modelId,
+          region: preferences.region,
+        };
+        active.resumeAfterSettings = false;
+        active.snapshot = {
+          ...active.snapshot,
+          status: "provider-issue",
+          notice:
+            "Speech settings changed while Cloud Voice was preparing. Confirm Retry because Provider Usage may already have occurred.",
+          errorCode: "SETTINGS_CHANGED_DURING_GENERATION",
+          retryRequiresConfirmation: true,
+        };
+        return this.transition([
+          ...resumePrefetchEffects,
+          this.renderEffect(active.snapshot),
+          this.saveDescriptorEffect(active.snapshot),
+        ]);
+      }
+    }
+    if (active.resumeAfterSettings && active.snapshot.mode === "cloud") {
+      active.resumeAfterSettings = false;
+      const playing = this.playCloud();
+      return {
+        snapshot: playing.snapshot,
+        effects: [...resumePrefetchEffects, ...playing.effects],
+      };
+    }
+    return this.transition([
+      ...resumePrefetchEffects,
       this.renderEffect(active.snapshot),
       this.saveDescriptorEffect(active.snapshot),
     ]);
@@ -859,6 +1140,7 @@ export class ReadingSessionController {
 
   private sourceChanged(): ReadingSessionTransition {
     const active = this.requireActive();
+    active.canResumeMedia = false;
     active.snapshot = {
       ...active.snapshot,
       status: "page-changed",
@@ -933,12 +1215,58 @@ export class ReadingSessionController {
     }
 
     if (event.type === "start") {
+      active.snapshot = {
+        ...active.snapshot,
+        status: "playing",
+        notice: null,
+      };
       return this.transition([
         this.contextEffect(active.snapshot, {
           type: "content.highlight",
           sentenceIndex: event.sentenceIndex,
           word: null,
         }),
+        this.renderEffect(active.snapshot),
+        this.saveDescriptorEffect(active.snapshot),
+      ]);
+    }
+    if (event.type === "pause") {
+      active.snapshot = {
+        ...active.snapshot,
+        status: "paused",
+        notice: "Paused",
+      };
+      return this.transition([
+        this.renderEffect(active.snapshot),
+        this.saveDescriptorEffect(active.snapshot),
+      ]);
+    }
+    if (event.type === "resume") {
+      active.snapshot = {
+        ...active.snapshot,
+        status: "playing",
+        notice: null,
+      };
+      return this.transition([
+        this.renderEffect(active.snapshot),
+        this.saveDescriptorEffect(active.snapshot),
+      ]);
+    }
+    if (event.type === "interrupted" || event.type === "cancelled") {
+      active.canResumeMedia = false;
+      active.snapshot = {
+        ...active.snapshot,
+        status: "paused",
+        notice:
+          "Chrome Voice stopped unexpectedly. Press play to restart the sentence.",
+        errorCode:
+          event.type === "cancelled"
+            ? "BROWSER_TTS_CANCELLED"
+            : "BROWSER_TTS_INTERRUPTED",
+      };
+      return this.transition([
+        this.renderEffect(active.snapshot),
+        this.saveDescriptorEffect(active.snapshot),
       ]);
     }
     if (event.type === "word") {
@@ -954,6 +1282,7 @@ export class ReadingSessionController {
       ]);
     }
     if (event.type === "error") {
+      active.canResumeMedia = false;
       active.snapshot = {
         ...active.snapshot,
         status: "provider-issue",
@@ -967,6 +1296,7 @@ export class ReadingSessionController {
     }
 
     const nextIndex = active.snapshot.currentSentenceIndex + 1;
+    active.canResumeMedia = false;
     if (nextIndex >= active.article.sentences.length) {
       active.snapshot = {
         ...active.snapshot,
@@ -977,6 +1307,9 @@ export class ReadingSessionController {
         status: "completed",
       };
       return this.transition([
+        this.contextEffect(active.snapshot, {
+          type: "content.clear-highlights",
+        }),
         this.renderEffect(active.snapshot),
         this.saveDescriptorEffect(active.snapshot),
       ]);

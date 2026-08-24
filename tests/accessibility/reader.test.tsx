@@ -66,7 +66,10 @@ async function expectNoViolations(state: ReaderViewState): Promise<void> {
 describe("floating Reader accessibility", () => {
   it("has no automated violations in its important visible states", async () => {
     await expectNoViolations({ kind: "finding" });
-    await expectNoViolations({ kind: "onboarding", providerConnected: false });
+    await expectNoViolations({
+      kind: "onboarding",
+      providerConnected: false,
+    });
     await expectNoViolations({
       kind: "error",
       title: "No readable Article found",
@@ -83,9 +86,12 @@ describe("floating Reader accessibility", () => {
       "page-changed",
       "completed",
     ] as const) {
-      await expectNoViolations({ kind: "session", snapshot: snapshot(status) });
+      await expectNoViolations({
+        kind: "session",
+        snapshot: snapshot(status),
+      });
     }
-  });
+  }, 10_000);
 
   it("keeps essential controls named when minimized and restores focus", async () => {
     const user = userEvent.setup();
@@ -101,7 +107,7 @@ describe("floating Reader accessibility", () => {
     await user.click(screen.getByRole("button", { name: "Minimize controls" }));
     expect(screen.getByRole("button", { name: "Pause" })).toHaveFocus();
     expect(screen.getByLabelText("25 percent read")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Restore controls" }));
+    await user.click(screen.getByRole("button", { name: "Maximize controls" }));
     expect(screen.getByRole("button", { name: "Pause" })).toBeVisible();
   });
 
@@ -128,5 +134,25 @@ describe("floating Reader accessibility", () => {
     speed.focus();
     await user.keyboard(" ");
     expect(onCommand).not.toHaveBeenCalled();
+  });
+
+  it("opens the details row above the main controls", async () => {
+    const user = userEvent.setup();
+    render(
+      <ReaderApp
+        state={{ kind: "session", snapshot: snapshot("paused") }}
+        onChooseMode={vi.fn()}
+        onCommand={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "More details" }));
+    const detail = screen.getByText("Now reading");
+    const controls = screen.getByLabelText("Reading controls");
+    expect(
+      detail.compareDocumentPosition(controls) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

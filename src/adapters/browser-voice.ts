@@ -39,30 +39,81 @@ export interface BrowserTtsPort {
 
 type SpeakEffect = Extract<ReadingSessionEffect, { type: "browser.speak" }>;
 
+function wordLengthAt(
+  text: string,
+  charIndex: number,
+  language: string,
+): number {
+  const segmenter = new Intl.Segmenter(language, { granularity: "word" });
+  for (const segment of segmenter.segment(text)) {
+    const endOffset = segment.index + segment.segment.length;
+    if (
+      segment.isWordLike &&
+      charIndex >= segment.index &&
+      charIndex < endOffset
+    ) {
+      return endOffset - charIndex;
+    }
+  }
+  return 0;
+}
+
 export class BrowserVoiceAdapter {
+  private currentUtterance: { intentionallyStopped: boolean } | null = null;
+
   constructor(private readonly tts: BrowserTtsPort) {}
 
   async speak(
     effect: SpeakEffect,
     onEvent: (event: BrowserSpeechEvent) => void,
   ): Promise<void> {
+    const utterance = { intentionallyStopped: false };
+    this.currentUtterance = utterance;
     const options: BrowserTtsOptions = {
       lang: effect.language,
       rate: effect.playbackSpeed,
       enqueue: false,
-      desiredEventTypes: ["start", "word", "sentence", "end", "error"],
+      desiredEventTypes: [
+        "start",
+        "word",
+        "sentence",
+        "end",
+        "error",
+        "pause",
+        "resume",
+        "interrupted",
+        "cancelled",
+      ],
       onEvent: (event) => {
         if (event.type === "word") {
+          const charIndex = Math.max(0, event.charIndex ?? 0);
+          const reportedLength = Math.max(0, event.length ?? 0);
           onEvent({
             type: "word",
             sentenceIndex: effect.sentenceIndex,
-            charIndex: Math.max(0, event.charIndex ?? 0),
-            length: Math.max(0, event.length ?? 0),
+            charIndex,
+            length:
+              reportedLength > 0
+                ? reportedLength
+                : wordLengthAt(effect.text, charIndex, effect.language),
           });
         } else if (event.type === "end") {
           onEvent({ type: "end", sentenceIndex: effect.sentenceIndex });
         } else if (event.type === "start") {
           onEvent({ type: "start", sentenceIndex: effect.sentenceIndex });
+        } else if (
+          event.type === "pause" ||
+          event.type === "resume" ||
+          event.type === "interrupted" ||
+          event.type === "cancelled"
+        ) {
+          if (
+            (event.type === "interrupted" || event.type === "cancelled") &&
+            utterance.intentionallyStopped
+          ) {
+            return;
+          }
+          onEvent({ type: event.type, sentenceIndex: effect.sentenceIndex });
         } else if (event.type === "error") {
           onEvent({
             type: "error",
@@ -94,6 +145,9 @@ export class BrowserVoiceAdapter {
   }
 
   stop(): void {
+    if (this.currentUtterance) {
+      this.currentUtterance.intentionallyStopped = true;
+    }
     this.tts.stop();
   }
 }

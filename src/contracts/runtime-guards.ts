@@ -218,6 +218,7 @@ export function isExtensionMessage(
       "pending.resume",
       "content.render",
       "content.highlight",
+      "content.clear-highlights",
       "content.clear",
       "session.reconcile.request",
     ],

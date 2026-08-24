@@ -109,6 +109,7 @@ export function OptionsApp() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    const settingsPort = chrome.runtime.connect({ name: "speech-settings" });
     void localPreferences.load().then(setPreferences);
     void chrome.commands.getAll().then((commands) =>
       setShortcuts(
@@ -143,17 +144,32 @@ export function OptionsApp() {
     };
     loadBrowserVoices();
     chrome.tts.onVoicesChanged.addListener(loadBrowserVoices);
-    return () => chrome.tts.onVoicesChanged.removeListener(loadBrowserVoices);
+    return () => {
+      chrome.tts.onVoicesChanged.removeListener(loadBrowserVoices);
+      settingsPort.disconnect();
+    };
   }, []);
 
   const interfaceLanguage = chrome.i18n.getUILanguage();
-  const baseInterfaceLanguage =
-    interfaceLanguage.split("-")[0] ?? interfaceLanguage;
+  const narrationLanguage =
+    preferences.narrationLanguageOverride ?? interfaceLanguage;
+  const baseNarrationLanguage =
+    narrationLanguage.split("-")[0] ?? narrationLanguage;
+  const availableNarrationLanguages = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          interfaceLanguage,
+          ...browserVoices.flatMap((voice) => (voice.lang ? [voice.lang] : [])),
+        ]),
+      ).sort((left, right) => left.localeCompare(right)),
+    [browserVoices, interfaceLanguage],
+  );
   const compatibleBrowserVoices = browserVoices.filter((voice) => {
     if (!voice.lang) return true;
     return voice.lang
       .toLocaleLowerCase()
-      .startsWith(baseInterfaceLanguage.toLocaleLowerCase());
+      .startsWith(baseNarrationLanguage.toLocaleLowerCase());
   });
 
   const savePreferences = async (next: Preferences) => {
@@ -366,6 +382,28 @@ export function OptionsApp() {
 
           <div className="setting-grid">
             <label className="field">
+              <span>Narration Language</span>
+              <input
+                list="speak-o-narration-languages"
+                value={preferences.narrationLanguageOverride ?? ""}
+                placeholder="Detect from each Article"
+                onChange={(event) =>
+                  void savePreferences({
+                    ...preferences,
+                    narrationLanguageOverride:
+                      event.currentTarget.value || null,
+                  })
+                }
+              />
+              <datalist id="speak-o-narration-languages">
+                {availableNarrationLanguages.map((language) => (
+                  <option key={language} value={language}>
+                    {language}
+                  </option>
+                ))}
+              </datalist>
+            </label>
+            <label className="field">
               <span>Default Voice Mode</span>
               <select
                 value={preferences.defaultVoiceMode}
@@ -385,19 +423,19 @@ export function OptionsApp() {
               <span>Chrome Voice</span>
               <select
                 value={
-                  preferences.browserVoiceByLanguage[interfaceLanguage] ?? ""
+                  preferences.browserVoiceByLanguage[narrationLanguage] ?? ""
                 }
                 onChange={(event) =>
                   void savePreferences({
                     ...preferences,
                     browserVoiceByLanguage: {
                       ...preferences.browserVoiceByLanguage,
-                      [interfaceLanguage]: event.currentTarget.value,
+                      [narrationLanguage]: event.currentTarget.value,
                     },
                   })
                 }
               >
-                <option value="">Chrome default for {interfaceLanguage}</option>
+                <option value="">Chrome default for {narrationLanguage}</option>
                 {compatibleBrowserVoices.map((voice) => (
                   <option
                     key={`${voice.voiceName}:${voice.lang ?? ""}`}
@@ -499,8 +537,8 @@ export function OptionsApp() {
                           ...preferences,
                           voiceByLanguage: {
                             ...preferences.voiceByLanguage,
-                            [interfaceLanguage]: voice.id,
-                            [baseInterfaceLanguage]: voice.id,
+                            [narrationLanguage]: voice.id,
+                            [baseNarrationLanguage]: voice.id,
                           },
                         })
                       }
@@ -513,9 +551,9 @@ export function OptionsApp() {
                         </small>
                       </span>
                       <span>
-                        {preferences.voiceByLanguage[interfaceLanguage] ===
+                        {preferences.voiceByLanguage[narrationLanguage] ===
                           voice.id ||
-                        preferences.voiceByLanguage[baseInterfaceLanguage] ===
+                        preferences.voiceByLanguage[baseNarrationLanguage] ===
                           voice.id
                           ? "Selected"
                           : "Choose"}

@@ -147,7 +147,7 @@ describe("ElevenLabs adapter contract", () => {
     const activeSocket = socket as FakeSocket | null;
     if (!activeSocket) throw new Error("Socket was not created");
     activeSocket.emit("open");
-    const sent = activeSocket.sent.map(
+    let sent = activeSocket.sent.map(
       (message) => JSON.parse(message) as Record<string, unknown>,
     );
     expect(sent[0]).toMatchObject({
@@ -155,11 +155,7 @@ describe("ElevenLabs adapter contract", () => {
       xi_api_key: "sk_secret_123",
       flush: true,
     });
-    expect(sent[1]).toMatchObject({
-      text: "Another real sentence. ",
-      flush: true,
-    });
-    expect(sent.at(-1)).toEqual({ text: "" });
+    expect(sent).toHaveLength(1);
     expect(sent.some((message) => message.text === " ")).toBe(false);
 
     activeSocket.emit(
@@ -189,6 +185,40 @@ describe("ElevenLabs adapter contract", () => {
       acknowledged: true,
       isFinal: false,
     });
+
+    transport.pausePrefetch();
+    const remainingText = " real sentence. ";
+    activeSocket.emit(
+      "message",
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          audio: "BAUG",
+          alignment: {
+            chars: Array.from(remainingText),
+            char_start_times_ms: Array.from(
+              { length: remainingText.length },
+              (_, index) => index * 40,
+            ),
+            char_durations_ms: Array.from(
+              { length: remainingText.length },
+              () => 40,
+            ),
+          },
+          is_final: false,
+        }),
+      }),
+    );
+    expect(activeSocket.sent).toHaveLength(1);
+
+    transport.resumePrefetch();
+    sent = activeSocket.sent.map(
+      (message) => JSON.parse(message) as Record<string, unknown>,
+    );
+    expect(sent[1]).toMatchObject({
+      text: "Another real sentence. ",
+      flush: true,
+    });
+    expect(sent.at(-1)).toEqual({ text: "" });
 
     transport.abortAll();
     expect(activeSocket.closed).toBe(true);

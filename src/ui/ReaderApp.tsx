@@ -7,13 +7,13 @@ import {
 } from "../storage/preferences";
 import {
   CloseIcon,
+  MaximizeIcon,
   MinimizeIcon,
   MoreIcon,
   NextIcon,
   PauseIcon,
   PlayIcon,
   PreviousIcon,
-  RestoreIcon,
   SettingsIcon,
 } from "./icons";
 
@@ -228,10 +228,10 @@ export function ReaderApp({
           {progress}%
         </span>
         <IconButton
-          label="Restore controls"
+          label="Maximize controls"
           onClick={() => setMinimized(false)}
         >
-          <RestoreIcon />
+          <MaximizeIcon />
         </IconButton>
       </section>
     );
@@ -244,6 +244,27 @@ export function ReaderApp({
       aria-label="Speak-O Article Reader"
       onKeyDown={handleKeyDown}
     >
+      {expanded ? (
+        <div className="detail-row">
+          <div className="article-detail">
+            <span className="eyebrow">Now reading</span>
+            <strong dir="auto">{snapshot.title ?? "Selected text"}</strong>
+          </div>
+          <span>{formatRemaining(snapshot.estimatedRemainingSeconds)}</span>
+          <span className={`status-pill status-${snapshot.status}`}>
+            {snapshot.status.replace("-", " ")}
+          </span>
+          <button
+            className="detail-action"
+            type="button"
+            onClick={() =>
+              command("set-highlights", snapshot.highlightsEnabled ? 0 : 1)
+            }
+          >
+            {snapshot.highlightsEnabled ? "Hide highlights" : "Show highlights"}
+          </button>
+        </div>
+      ) : null}
       <div className="main-row">
         <span className="brand-mark desktop-brand" aria-label="Speak-O">
           S
@@ -336,27 +357,6 @@ export function ReaderApp({
           </IconButton>
         </div>
       </div>
-      {expanded ? (
-        <div className="detail-row">
-          <div className="article-detail">
-            <span className="eyebrow">Now reading</span>
-            <strong dir="auto">{snapshot.title ?? "Selected text"}</strong>
-          </div>
-          <span>{formatRemaining(snapshot.estimatedRemainingSeconds)}</span>
-          <span className={`status-pill status-${snapshot.status}`}>
-            {snapshot.status.replace("-", " ")}
-          </span>
-          <button
-            className="detail-action"
-            type="button"
-            onClick={() =>
-              command("set-highlights", snapshot.highlightsEnabled ? 0 : 1)
-            }
-          >
-            {snapshot.highlightsEnabled ? "Hide highlights" : "Show highlights"}
-          </button>
-        </div>
-      ) : null}
       {snapshot.status === "usage-limit" ? (
         <div className="recovery-row" aria-label="Provider Usage actions">
           <span>{snapshot.notice}</span>

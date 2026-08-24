@@ -33,7 +33,7 @@ The current sentence within an Article Snapshot or Selection. It is a content po
 _Avoid_: Playback time, audio position
 
 **Playback Speed**:
-The user-selected rate at which speech is heard. In Cloud Voice Mode it is applied locally to already-generated audio without additional Provider Usage; in Browser Voice Mode a change takes effect at the next sentence.
+The user-selected rate at which speech is heard. In Cloud Voice Mode it is applied immediately to already-generated audio without additional Provider Usage. In Browser Voice Mode, where Chrome cannot reliably retime an active utterance, an immediate change restarts the current sentence at the new rate.
 _Avoid_: Voice speed, generation speed
 
 **Narration Language**:

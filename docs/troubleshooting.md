@@ -14,7 +14,7 @@ The Reading Session pauses when mapped text, URL, or page lifecycle state change
 
 ## Chrome Voice does not speak
 
-Open settings and choose a Voice exposed by Chrome or the operating system. A Voice may be unavailable, remote, or removed by the platform. Playback Speed changes in Browser Voice Mode apply at the next sentence.
+Open settings and choose a Voice exposed by Chrome or the operating system. A Voice may be unavailable, remote, or removed by the platform. Playback Speed changes restart the current Browser Voice sentence immediately because Chrome cannot reliably retime an utterance already in progress.
 
 ## ElevenLabs will not connect
 

@@ -274,6 +274,12 @@ export default defineBackground(() => {
         case "provider.abort":
           providerTransport.abortAll();
           break;
+        case "provider.pause-prefetch":
+          providerTransport.pausePrefetch();
+          break;
+        case "provider.resume-prefetch":
+          providerTransport.resumePrefetch();
+          break;
         case "buffer.store": {
           const snapshot = controller.currentSnapshot();
           const decision = sessionBuffer.store(
@@ -320,6 +326,11 @@ export default defineBackground(() => {
               sentenceIndex: effect.sentenceIndex,
               word: effect.word,
             });
+          }
+          break;
+        case "content.clear-highlights":
+          if (target) {
+            await sendToContent(target, { type: "content.clear-highlights" });
           }
           break;
         case "content.clear":
@@ -491,6 +502,39 @@ export default defineBackground(() => {
     }
   };
 
+  const settingsOpened = () => {
+    const snapshot = controller.currentSnapshot();
+    if (!snapshot) return;
+    void executeTransition(
+      controller.dispatch({
+        type: "settings.opened",
+        sessionId: snapshot.id,
+        generationEpoch: snapshot.generationEpoch,
+      }),
+    );
+  };
+
+  const settingsClosed = () => {
+    const snapshot = controller.currentSnapshot();
+    if (!snapshot) return;
+    void preferences.load().then((currentPreferences) =>
+      executeTransition(
+        controller.dispatch({
+          type: "settings.closed",
+          sessionId: snapshot.id,
+          generationEpoch: snapshot.generationEpoch,
+          preferences: currentPreferences,
+        }),
+      ),
+    );
+  };
+
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== "speech-settings") return;
+    settingsOpened();
+    port.onDisconnect.addListener(settingsClosed);
+  });
+
   chrome.runtime.onMessage.addListener(
     (message: unknown, sender, sendResponse) => {
       if (
@@ -603,6 +647,9 @@ export default defineBackground(() => {
           const command = commandForUi(message);
           if (command) void executeTransition(controller.dispatch(command));
         }
+      } else if (message.type === "settings.open") {
+        settingsOpened();
+        void chrome.runtime.openOptionsPage();
       } else if (message.type === "source.changed") {
         const snapshot = controller.currentSnapshot();
         if (

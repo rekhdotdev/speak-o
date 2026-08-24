@@ -1,3 +1,3 @@
-# Apply Cloud Voice Playback Speed locally
+# Apply Playback Speed immediately
 
-Speak-O synthesizes ElevenLabs audio at normal speed and applies the user's 0.5x–3x Playback Speed locally with pitch-preserving media playback, allowing immediate changes to buffered audio while retaining the provider's media-time Speech Alignment and avoiding regeneration or additional Provider Usage; Browser Voice Mode instead applies rate changes at the next sentence because `chrome.tts` cannot reliably alter an active utterance.
+Speak-O synthesizes ElevenLabs audio at normal speed and applies the user's 0.5x–3x Playback Speed locally with pitch-preserving media playback, allowing immediate changes to buffered audio while retaining the provider's media-time Speech Alignment and avoiding regeneration or additional Provider Usage. Browser Voice Mode also responds immediately: because `chrome.tts` cannot reliably retime an active utterance, Speak-O stops and restarts the current sentence at the new rate. Restarting is explicit and predictable, while attempting to approximate a mid-utterance position would make narration and highlighting diverge.

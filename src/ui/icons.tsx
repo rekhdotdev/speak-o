@@ -71,15 +71,21 @@ export function MoreIcon() {
 export function MinimizeIcon() {
   return (
     <Icon>
-      <path d="M5 12h14" />
+      <path d="M4 14h6v6" />
+      <path d="M20 10h-6V4" />
+      <path d="m14 10 7-7" />
+      <path d="m3 21 7-7" />
     </Icon>
   );
 }
 
-export function RestoreIcon() {
+export function MaximizeIcon() {
   return (
     <Icon>
-      <path d="M8 8h8v8H8z" />
+      <path d="M15 3h6v6" />
+      <path d="M9 21H3v-6" />
+      <path d="m21 3-7 7" />
+      <path d="m3 21 7-7" />
     </Icon>
   );
 }
