@@ -1,0 +1,3 @@
+# Stream a rolling generation window
+
+ElevenLabs Cloud Voice Mode uses reconnectable WebSocket generation bursts with a Generation Window of the current sentence and no more than two complete upcoming sentences, rather than one request per sentence, an idle keepalive, or eager whole-Article synthesis. Playback begins after a small adaptive audio buffer, prefetch pauses while speech settings are open, already-generated audio is never discarded merely to apply a new setting, and a configurable 25,000-character session guard limits unintended Provider Usage; this trades a short startup buffer and slightly delayed setting changes for lower latency, bounded waste, and fewer duplicate charges.

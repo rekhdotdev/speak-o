@@ -1,0 +1,3 @@
+# Build with WXT and React
+
+Speak-O is a Chrome 124+ Manifest V3 extension built with WXT, React, strict TypeScript, ordinary scoped CSS, and npm. Runtime-registered content scripts own extraction, original-page highlighting, and an isolated Shadow Root UI; a background service worker owns the single global Reading Session, Provider transport, and `chrome.tts`; a temporary offscreen document owns Cloud Voice decoding, aligned playback, and its audio clock; an options page owns configuration, and no popup is shipped. This keeps credentials and provider access out of page contexts while isolating DOM work from audio playback.

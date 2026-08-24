@@ -1,0 +1,3 @@
+# Keep Provider Credentials out of page contexts
+
+Speak-O keeps session-only Provider Credentials in `chrome.storage.session`, stores a credential in `chrome.storage.local` only after the user explicitly chooses “Remember on this device,” never uses `chrome.storage.sync`, and restricts extension storage to trusted extension contexts; provider transport runs in the service worker, while content scripts and the offscreen audio document receive neither credentials nor provider access, accepting that a remembered credential is protected by the Chrome profile rather than application-level encryption.
