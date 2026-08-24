@@ -5,6 +5,85 @@ import {
 import type { ReadingSessionEffect } from "../../src/session/types";
 
 describe("Browser Voice adapter contract", () => {
+  it("falls back to Chrome's default voice when voice discovery fails", async () => {
+    const speak = vi.fn(async () => undefined);
+    const port: BrowserTtsPort = {
+      getVoices: vi.fn(async () => {
+        throw new Error("voice discovery unavailable");
+      }),
+      speak,
+      pause: vi.fn(),
+      resume: vi.fn(),
+      stop: vi.fn(),
+    };
+    const adapter = new BrowserVoiceAdapter(port);
+
+    await adapter.speak(
+      {
+        type: "browser.speak",
+        sessionId: "session-default-voice",
+        generationEpoch: 1,
+        sentenceIndex: 0,
+        text: "Keep speaking.",
+        language: "en-US",
+        voiceId: null,
+        playbackSpeed: 1,
+      },
+      vi.fn(),
+    );
+
+    expect(speak).toHaveBeenCalledWith(
+      "Keep speaking.",
+      expect.not.objectContaining({ voiceName: expect.anything() }),
+    );
+  });
+
+  it("chooses a language-compatible word-boundary voice when Chrome has no explicit preference", async () => {
+    let capturedOptions: Parameters<BrowserTtsPort["speak"]>[1] | undefined;
+    const port: BrowserTtsPort & {
+      getVoices(): Promise<
+        Array<{ voiceName: string; lang?: string; eventTypes?: string[] }>
+      >;
+    } = {
+      async getVoices() {
+        return [
+          {
+            voiceName: "Sentence Voice",
+            lang: "en-US",
+            eventTypes: ["start", "end"],
+          },
+          {
+            voiceName: "Word Voice",
+            lang: "en-GB",
+            eventTypes: ["start", "word", "end"],
+          },
+        ];
+      },
+      async speak(_text, options) {
+        capturedOptions = options;
+      },
+      pause: vi.fn(),
+      resume: vi.fn(),
+      stop: vi.fn(),
+    };
+    const adapter = new BrowserVoiceAdapter(port);
+
+    await adapter.speak(
+      {
+        type: "browser.speak",
+        sessionId: "session-word-voice",
+        generationEpoch: 1,
+        sentenceIndex: 0,
+        text: "Highlight every word.",
+        language: "en-US",
+        voiceId: null,
+        playbackSpeed: 1,
+      },
+      vi.fn(),
+    );
+
+    expect(capturedOptions?.voiceName).toBe("Word Voice");
+  });
   it("speaks one sentence through chrome.tts options and reports capability events", async () => {
     let capturedText = "";
     let capturedOptions: Parameters<BrowserTtsPort["speak"]>[1] | undefined;

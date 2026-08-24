@@ -43,10 +43,10 @@ a {
 }
 .options-layout {
   display: grid;
-  grid-template-columns: 248px minmax(0, 760px);
+  grid-template-columns: 248px minmax(0, 920px);
   justify-content: center;
   gap: 64px;
-  max-inline-size: 1160px;
+  max-inline-size: 1320px;
   margin: 0 auto;
   padding: 32px 28px 96px;
 }

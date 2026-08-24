@@ -190,27 +190,20 @@ describe("Reading Session interface", () => {
       sessionId: "session-resume",
       generationEpoch: 1,
     });
-    expect(resumed.snapshot).toMatchObject({
-      status: "paused",
-      notice: "Resuming Chrome Voice…",
-    });
+    expect(resumed.snapshot).toMatchObject({ status: "playing", notice: null });
     expect(resumed.effects).toContainEqual(
-      expect.objectContaining({ type: "browser.resume" }),
+      expect.objectContaining({ type: "browser.stop" }),
+    );
+    expect(resumed.effects).toContainEqual(
+      expect.objectContaining({
+        type: "browser.speak",
+        sentenceIndex: 0,
+        text: "One.",
+      }),
     );
     expect(
-      resumed.effects.some((effect) => effect.type === "browser.speak"),
+      resumed.effects.some((effect) => effect.type === "browser.resume"),
     ).toBe(false);
-
-    const resumeConfirmed = controller.dispatch({
-      type: "browser.event",
-      sessionId: "session-resume",
-      generationEpoch: 1,
-      event: { type: "resume", sentenceIndex: 0 },
-    });
-    expect(resumeConfirmed.snapshot).toMatchObject({
-      status: "playing",
-      notice: null,
-    });
 
     controller.dispatch({
       type: "pause",

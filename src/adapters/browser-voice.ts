@@ -31,6 +31,9 @@ export interface BrowserTtsOptions {
 }
 
 export interface BrowserTtsPort {
+  getVoices?(): Promise<
+    Array<{ voiceName: string; lang?: string; eventTypes?: string[] }>
+  >;
   speak(text: string, options: BrowserTtsOptions): Promise<void>;
   pause(): void;
   resume(): void;
@@ -38,6 +41,29 @@ export interface BrowserTtsPort {
 }
 
 type SpeakEffect = Extract<ReadingSessionEffect, { type: "browser.speak" }>;
+
+function wordBoundaryVoice(
+  voices: Awaited<ReturnType<NonNullable<BrowserTtsPort["getVoices"]>>>,
+  language: string,
+): string | null {
+  const normalizedLanguage = language.toLocaleLowerCase();
+  const baseLanguage = normalizedLanguage.split("-")[0] ?? normalizedLanguage;
+  const supportsWord = (voice: (typeof voices)[number]) =>
+    voice.eventTypes?.includes("word") === true;
+  const exact = voices.find(
+    (voice) =>
+      supportsWord(voice) &&
+      voice.lang?.toLocaleLowerCase() === normalizedLanguage,
+  );
+  if (exact) return exact.voiceName;
+  return (
+    voices.find(
+      (voice) =>
+        supportsWord(voice) &&
+        voice.lang?.toLocaleLowerCase().split("-")[0] === baseLanguage,
+    )?.voiceName ?? null
+  );
+}
 
 function wordLengthAt(
   text: string,
@@ -123,7 +149,18 @@ export class BrowserVoiceAdapter {
         }
       },
     };
-    if (effect.voiceId) options.voiceName = effect.voiceId;
+    let voiceName = effect.voiceId;
+    if (!voiceName && this.tts.getVoices) {
+      try {
+        voiceName = wordBoundaryVoice(
+          await this.tts.getVoices(),
+          effect.language,
+        );
+      } catch {
+        voiceName = null;
+      }
+    }
+    if (voiceName) options.voiceName = voiceName;
 
     try {
       await this.tts.speak(effect.text, options);

@@ -18,6 +18,7 @@ import {
 } from "../src/provider/elevenlabs";
 import { ReadingSessionController } from "../src/session/reading-session";
 import { SessionBuffer } from "../src/session/session-buffer";
+import { StopBarrier } from "../src/session/stop-barrier";
 import type {
   AudioEvent,
   ProviderEvent,
@@ -87,12 +88,25 @@ export default defineBackground(() => {
   const metadataClient = new ElevenLabsMetadataClient();
   const providerTransport = new ElevenLabsTransport();
   const sessionBuffer = new SessionBuffer();
+  const stopBarrier = new StopBarrier();
   const sessionTargets = new Map<string, ContentTarget>();
   let recoveryDescriptor: ReadingSessionDescriptor | null = null;
   let recoveryInFlight = false;
   let sentenceStartedAt = 0;
 
   const browserTtsPort: BrowserTtsPort = {
+    getVoices: async () =>
+      (await chrome.tts.getVoices()).flatMap((voice) =>
+        voice.voiceName
+          ? [
+              {
+                voiceName: voice.voiceName,
+                ...(voice.lang ? { lang: voice.lang } : {}),
+                ...(voice.eventTypes ? { eventTypes: voice.eventTypes } : {}),
+              },
+            ]
+          : [],
+      ),
     async speak(text, options) {
       const ttsOptions: chrome.tts.TtsOptions = {
         lang: options.lang,
@@ -387,26 +401,27 @@ export default defineBackground(() => {
     }
   };
 
-  const injectAndExtract = async (target: ContentTarget) => {
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: target.tabId, frameIds: [target.frameId] },
-        files: ["reader.js"],
-      });
-      await sendToContent(target, { type: "extract.request" });
-    } catch {
-      await chrome.action.setBadgeBackgroundColor({
-        tabId: target.tabId,
-        color: "#9c3d2e",
-      });
-      await chrome.action.setBadgeText({ tabId: target.tabId, text: "!" });
-      await chrome.action.setTitle({
-        tabId: target.tabId,
-        title:
-          "Speak-O cannot run on this protected Chrome page or unsupported document.",
-      });
-    }
-  };
+  const injectAndExtract = (target: ContentTarget) =>
+    stopBarrier.afterStop(async () => {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: target.tabId, frameIds: [target.frameId] },
+          files: ["reader.js"],
+        });
+        await sendToContent(target, { type: "extract.request" });
+      } catch {
+        await chrome.action.setBadgeBackgroundColor({
+          tabId: target.tabId,
+          color: "#9c3d2e",
+        });
+        await chrome.action.setBadgeText({ tabId: target.tabId, text: "!" });
+        await chrome.action.setTitle({
+          tabId: target.tabId,
+          title:
+            "Speak-O cannot run on this protected Chrome page or unsupported document.",
+        });
+      }
+    });
 
   const handleExtraction = async (
     article: ArticleSnapshot,
@@ -633,18 +648,30 @@ export default defineBackground(() => {
           const target = sessionTargets.get(snapshot.id);
           if (target) {
             void (async () => {
-              await executeTransition(
-                controller.dispatch({
-                  type: "stop",
-                  sessionId: snapshot.id,
-                  generationEpoch: snapshot.generationEpoch,
-                }),
+              await stopBarrier.track(() =>
+                executeTransition(
+                  controller.dispatch({
+                    type: "stop",
+                    sessionId: snapshot.id,
+                    generationEpoch: snapshot.generationEpoch,
+                  }),
+                ),
               );
               await injectAndExtract(target);
             })();
           }
         } else {
           const command = commandForUi(message);
+          if (command?.type === "stop") {
+            const cleanup = stopBarrier.track(() =>
+              executeTransition(controller.dispatch(command)),
+            );
+            void cleanup.then(
+              () => sendResponse({ ok: true }),
+              () => sendResponse({ ok: false }),
+            );
+            return true;
+          }
           if (command) void executeTransition(controller.dispatch(command));
         }
       } else if (message.type === "settings.open") {

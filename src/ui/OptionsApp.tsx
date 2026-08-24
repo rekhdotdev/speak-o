@@ -435,7 +435,9 @@ export function OptionsApp() {
                   })
                 }
               >
-                <option value="">Chrome default for {narrationLanguage}</option>
+                <option value="">
+                  Automatic · prefer word highlighting · {narrationLanguage}
+                </option>
                 {compatibleBrowserVoices.map((voice) => (
                   <option
                     key={`${voice.voiceName}:${voice.lang ?? ""}`}
@@ -443,6 +445,9 @@ export function OptionsApp() {
                   >
                     {voice.voiceName}
                     {voice.lang ? ` · ${voice.lang}` : ""}
+                    {voice.eventTypes?.includes("word")
+                      ? " · word highlighting"
+                      : " · sentence highlighting only"}
                     {voice.remote ? " · may use a remote service" : ""}
                   </option>
                 ))}

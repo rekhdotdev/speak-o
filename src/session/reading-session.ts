@@ -407,21 +407,25 @@ export class ReadingSessionController {
   private play(): ReadingSessionTransition {
     const active = this.requireActive();
     if (active.snapshot.status === "paused" && active.canResumeMedia) {
+      if (active.snapshot.mode === "browser") {
+        active.canResumeMedia = false;
+        const restarted = this.playBrowser();
+        return {
+          snapshot: restarted.snapshot,
+          effects: [
+            this.contextEffect(active.snapshot, { type: "browser.stop" }),
+            ...restarted.effects,
+          ],
+        };
+      }
       active.snapshot = {
         ...active.snapshot,
-        status:
-          active.snapshot.mode === "browser"
-            ? active.snapshot.status
-            : "playing",
-        notice:
-          active.snapshot.mode === "browser" ? "Resuming Chrome Voice…" : null,
+        status: "playing",
+        notice: null,
       };
       return this.transition([
         this.contextEffect(active.snapshot, {
-          type:
-            active.snapshot.mode === "browser"
-              ? "browser.resume"
-              : "audio.resume",
+          type: "audio.resume",
         }),
         this.renderEffect(active.snapshot),
         this.saveDescriptorEffect(active.snapshot),
