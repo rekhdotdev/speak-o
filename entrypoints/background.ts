@@ -18,6 +18,7 @@ import {
 } from "../src/provider/elevenlabs";
 import { ReadingSessionController } from "../src/session/reading-session";
 import { SessionBuffer } from "../src/session/session-buffer";
+import { StartupBarrier } from "../src/session/startup-barrier";
 import { StopBarrier } from "../src/session/stop-barrier";
 import type {
   AudioEvent,
@@ -183,6 +184,9 @@ export default defineBackground(() => {
     });
     if (!delivered) await clearStoredSession();
   };
+  const startupBarrier = new StartupBarrier(
+    credentials.initialize().then(requestSessionRecovery),
+  );
 
   const ensureOffscreen = async () => {
     const url = chrome.runtime.getURL("offscreen.html");
@@ -402,26 +406,28 @@ export default defineBackground(() => {
   };
 
   const injectAndExtract = (target: ContentTarget) =>
-    stopBarrier.afterStop(async () => {
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: target.tabId, frameIds: [target.frameId] },
-          files: ["reader.js"],
-        });
-        await sendToContent(target, { type: "extract.request" });
-      } catch {
-        await chrome.action.setBadgeBackgroundColor({
-          tabId: target.tabId,
-          color: "#9c3d2e",
-        });
-        await chrome.action.setBadgeText({ tabId: target.tabId, text: "!" });
-        await chrome.action.setTitle({
-          tabId: target.tabId,
-          title:
-            "Speak-O cannot run on this protected Chrome page or unsupported document.",
-        });
-      }
-    });
+    startupBarrier.afterRecovery(() =>
+      stopBarrier.afterStop(async () => {
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: target.tabId, frameIds: [target.frameId] },
+            files: ["reader.js"],
+          });
+          await sendToContent(target, { type: "extract.request" });
+        } catch {
+          await chrome.action.setBadgeBackgroundColor({
+            tabId: target.tabId,
+            color: "#9c3d2e",
+          });
+          await chrome.action.setBadgeText({ tabId: target.tabId, text: "!" });
+          await chrome.action.setTitle({
+            tabId: target.tabId,
+            title:
+              "Speak-O cannot run on this protected Chrome page or unsupported document.",
+          });
+        }
+      }),
+    );
 
   const handleExtraction = async (
     article: ArticleSnapshot,
@@ -542,6 +548,42 @@ export default defineBackground(() => {
         }),
       ),
     );
+  };
+
+  const settingsChanged = () => {
+    const snapshot = controller.currentSnapshot();
+    if (!snapshot) return;
+    void preferences.load().then(async (currentPreferences) => {
+      const current = controller.currentSnapshot();
+      if (
+        !current ||
+        current.id !== snapshot.id ||
+        current.generationEpoch !== snapshot.generationEpoch
+      ) {
+        return;
+      }
+      await executeTransition(
+        controller.dispatch({
+          type: "settings.closed",
+          sessionId: current.id,
+          generationEpoch: current.generationEpoch,
+          preferences: currentPreferences,
+        }),
+      );
+      const updated = controller.currentSnapshot();
+      if (
+        updated?.id === snapshot.id &&
+        updated.generationEpoch === snapshot.generationEpoch
+      ) {
+        await executeTransition(
+          controller.dispatch({
+            type: "settings.opened",
+            sessionId: updated.id,
+            generationEpoch: updated.generationEpoch,
+          }),
+        );
+      }
+    });
   };
 
   chrome.runtime.onConnect.addListener((port) => {
@@ -677,6 +719,8 @@ export default defineBackground(() => {
       } else if (message.type === "settings.open") {
         settingsOpened();
         void chrome.runtime.openOptionsPage();
+      } else if (message.type === "settings.changed") {
+        settingsChanged();
       } else if (message.type === "source.changed") {
         const snapshot = controller.currentSnapshot();
         if (
@@ -912,6 +956,4 @@ export default defineBackground(() => {
       PENDING_CLOUD_KEY,
     ]);
   });
-
-  void credentials.initialize().then(requestSessionRecovery);
 });

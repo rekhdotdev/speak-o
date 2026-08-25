@@ -243,6 +243,53 @@ describe("Reading Session interface", () => {
     );
   });
 
+  it("restarts a playing Browser Voice sentence when settings select a new voice", () => {
+    const controller = new ReadingSessionController(() => "session-voice");
+    controller.dispatch({
+      type: "activate",
+      article: article("article-voice", ["Hear the changed voice."]),
+      sourceTabId: 9,
+      sourceFrameId: 0,
+      mode: "browser",
+      preferences: DEFAULT_PREFERENCES,
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "session-voice",
+      generationEpoch: 1,
+    });
+    controller.dispatch({
+      type: "settings.opened",
+      sessionId: "session-voice",
+      generationEpoch: 1,
+    });
+
+    const changed = controller.dispatch({
+      type: "settings.closed",
+      sessionId: "session-voice",
+      generationEpoch: 1,
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        browserVoiceByLanguage: { "en-US": "Different Voice" },
+      },
+    });
+
+    expect(changed.snapshot).toMatchObject({
+      status: "playing",
+      voiceId: "Different Voice",
+    });
+    expect(changed.effects).toContainEqual(
+      expect.objectContaining({ type: "browser.stop" }),
+    );
+    expect(changed.effects).toContainEqual(
+      expect.objectContaining({
+        type: "browser.speak",
+        sentenceIndex: 0,
+        voiceId: "Different Voice",
+      }),
+    );
+  });
+
   it("pauses with an actionable state when Chrome unexpectedly cancels speech", () => {
     const controller = new ReadingSessionController(() => "session-cancelled");
     controller.dispatch({

@@ -14,6 +14,7 @@ import {
 import { isExtensionMessage, isRecord } from "../src/contracts/runtime-guards";
 import type { ReadingSessionSnapshot } from "../src/session/types";
 import type { VoiceMode } from "../src/storage/preferences";
+import { sendRuntimeMessageSafely } from "../src/runtime/safe-runtime-message";
 
 const HOST_ID = `speak-o-reader-root-${chrome.runtime.id}`;
 const PAGE_HIGHLIGHT_STYLE_ID = `speak-o-highlight-styles-${chrome.runtime.id}`;
@@ -70,6 +71,7 @@ function installPageHighlightStyles(): void {
 
 function mountRuntime(): ReaderRuntime | null {
   if (isolatedWindow.__speakOReaderMounted) return null;
+  document.getElementById(HOST_ID)?.remove();
   const host = document.createElement("div");
   host.id = HOST_ID;
   host.style.all = "initial";
@@ -104,11 +106,14 @@ export default defineUnlistedScript(() => {
 
   if (runtime) {
     const send = (message: Record<string, unknown>) =>
-      chrome.runtime.sendMessage({
-        version: 1,
-        target: "background",
-        ...message,
-      });
+      sendRuntimeMessageSafely(
+        (runtimeMessage) => chrome.runtime.sendMessage(runtimeMessage),
+        {
+          version: 1,
+          target: "background",
+          ...message,
+        },
+      );
 
     const remove = () => {
       runtime.highlighter?.clear();

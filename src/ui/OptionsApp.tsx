@@ -175,6 +175,11 @@ export function OptionsApp() {
   const savePreferences = async (next: Preferences) => {
     setPreferences(next);
     await localPreferences.save(next);
+    await chrome.runtime.sendMessage({
+      version: 1,
+      target: "background",
+      type: "settings.changed",
+    });
     setStatus("Preferences saved locally.");
   };
 
@@ -425,15 +430,17 @@ export function OptionsApp() {
                 value={
                   preferences.browserVoiceByLanguage[narrationLanguage] ?? ""
                 }
-                onChange={(event) =>
+                onChange={(event) => {
+                  const voiceName = event.currentTarget.value;
                   void savePreferences({
                     ...preferences,
                     browserVoiceByLanguage: {
                       ...preferences.browserVoiceByLanguage,
-                      [narrationLanguage]: event.currentTarget.value,
+                      [narrationLanguage]: voiceName,
+                      [baseNarrationLanguage]: voiceName,
                     },
-                  })
-                }
+                  });
+                }}
               >
                 <option value="">
                   Automatic · prefer word highlighting · {narrationLanguage}

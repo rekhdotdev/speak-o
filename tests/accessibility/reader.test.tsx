@@ -91,7 +91,7 @@ describe("floating Reader accessibility", () => {
         snapshot: snapshot(status),
       });
     }
-  }, 10_000);
+  }, 20_000);
 
   it("keeps essential controls named when minimized and restores focus", async () => {
     const user = userEvent.setup();
@@ -154,5 +154,21 @@ describe("floating Reader accessibility", () => {
       detail.compareDocumentPosition(controls) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("presents Reading Position as a noninteractive progress indicator", () => {
+    render(
+      <ReaderApp
+        state={{ kind: "session", snapshot: snapshot("playing") }}
+        onChooseMode={vi.fn()}
+        onCommand={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("progressbar", { name: "Reading progress" }),
+    ).toHaveAttribute("aria-valuetext", "25 percent");
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
   });
 });

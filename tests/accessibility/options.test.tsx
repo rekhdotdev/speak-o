@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { OptionsApp } from "../../src/ui/OptionsApp";
 
@@ -32,7 +33,7 @@ const chromeMock = {
   },
   tabs: { create: vi.fn(async () => undefined) },
   tts: {
-    getVoices: vi.fn(async () => []),
+    getVoices: vi.fn<() => Promise<chrome.tts.TtsVoice[]>>(async () => []),
     onVoicesChanged: {
       addListener: vi.fn(),
       removeListener: vi.fn(),
@@ -42,6 +43,11 @@ const chromeMock = {
 };
 
 describe("options accessibility", () => {
+  beforeEach(() => {
+    chromeMock.storage.local.set.mockClear();
+    chromeMock.tts.getVoices.mockResolvedValue([]);
+  });
+
   it("has landmark, label, and control semantics without automated violations", async () => {
     vi.stubGlobal("chrome", chromeMock);
     const view = render(<OptionsApp />);
@@ -51,5 +57,41 @@ describe("options accessibility", () => {
       }),
     ).toBeVisible();
     expect((await axe.run(view.container)).violations).toEqual([]);
+  }, 10_000);
+
+  it("saves a selected Chrome Voice for both the exact and base language", async () => {
+    chromeMock.tts.getVoices.mockResolvedValue([
+      {
+        voiceName: "Word Voice",
+        lang: "en-US",
+        eventTypes: ["start", "word", "end"],
+      },
+    ]);
+    vi.stubGlobal("chrome", chromeMock);
+    const user = userEvent.setup();
+    render(<OptionsApp />);
+
+    await user.selectOptions(
+      await screen.findByRole("combobox", { name: "Chrome Voice" }),
+      "Word Voice",
+    );
+
+    await waitFor(() =>
+      expect(chromeMock.storage.local.set).toHaveBeenCalledWith({
+        preferences: expect.objectContaining({
+          browserVoiceByLanguage: {
+            "en-US": "Word Voice",
+            en: "Word Voice",
+          },
+        }),
+      }),
+    );
+    await waitFor(() =>
+      expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith({
+        version: 1,
+        target: "background",
+        type: "settings.changed",
+      }),
+    );
   });
 });

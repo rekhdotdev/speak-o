@@ -111,6 +111,12 @@ export class BrowserVoiceAdapter {
         "cancelled",
       ],
       onEvent: (event) => {
+        if (
+          utterance.intentionallyStopped ||
+          this.currentUtterance !== utterance
+        ) {
+          return;
+        }
         if (event.type === "word") {
           const charIndex = Math.max(0, event.charIndex ?? 0);
           const reportedLength = Math.max(0, event.length ?? 0);
@@ -133,12 +139,6 @@ export class BrowserVoiceAdapter {
           event.type === "interrupted" ||
           event.type === "cancelled"
         ) {
-          if (
-            (event.type === "interrupted" || event.type === "cancelled") &&
-            utterance.intentionallyStopped
-          ) {
-            return;
-          }
           onEvent({ type: event.type, sentenceIndex: effect.sentenceIndex });
         } else if (event.type === "error") {
           onEvent({
@@ -161,10 +161,19 @@ export class BrowserVoiceAdapter {
       }
     }
     if (voiceName) options.voiceName = voiceName;
+    if (utterance.intentionallyStopped || this.currentUtterance !== utterance) {
+      return;
+    }
 
     try {
       await this.tts.speak(effect.text, options);
     } catch {
+      if (
+        utterance.intentionallyStopped ||
+        this.currentUtterance !== utterance
+      ) {
+        return;
+      }
       onEvent({
         type: "error",
         sentenceIndex: effect.sentenceIndex,

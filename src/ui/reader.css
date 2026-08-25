@@ -183,11 +183,22 @@ input:focus-visible {
   min-inline-size: 100px;
   padding-inline: 6px;
 }
-.progress-control input {
+.progress-control progress {
+  appearance: none;
   inline-size: 100%;
   min-inline-size: 60px;
-  accent-color: var(--accent);
-  cursor: pointer;
+  block-size: 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+}
+.progress-control progress::-webkit-progress-bar {
+  background: var(--surface-subtle);
+}
+.progress-control progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 999px;
 }
 .progress-number {
   color: var(--muted);

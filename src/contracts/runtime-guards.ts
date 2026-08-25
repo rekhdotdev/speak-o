@@ -211,6 +211,7 @@ export function isExtensionMessage(
       "provider.connect",
       "provider.disconnect",
       "settings.open",
+      "settings.changed",
     ],
     content: [
       "extract.request",

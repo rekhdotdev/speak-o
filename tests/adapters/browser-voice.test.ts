@@ -1,10 +1,103 @@
 import {
   BrowserVoiceAdapter,
+  type BrowserTtsOptions,
   type BrowserTtsPort,
 } from "../../src/adapters/browser-voice";
 import type { ReadingSessionEffect } from "../../src/session/types";
 
 describe("Browser Voice adapter contract", () => {
+  it("does not speak an utterance replaced while voice discovery was pending", async () => {
+    let finishDiscovery:
+      | ((voices: Array<{ voiceName: string; lang: string }>) => void)
+      | undefined;
+    const discovery = new Promise<Array<{ voiceName: string; lang: string }>>(
+      (resolve) => {
+        finishDiscovery = resolve;
+      },
+    );
+    const speak = vi.fn(async () => undefined);
+    const port: BrowserTtsPort = {
+      getVoices: vi.fn(() => discovery),
+      speak,
+      pause: vi.fn(),
+      resume: vi.fn(),
+      stop: vi.fn(),
+    };
+    const adapter = new BrowserVoiceAdapter(port);
+    const first = adapter.speak(
+      {
+        type: "browser.speak",
+        sessionId: "session-discovery",
+        generationEpoch: 1,
+        sentenceIndex: 0,
+        text: "Stale sentence.",
+        language: "en-US",
+        voiceId: null,
+        playbackSpeed: 1,
+      },
+      vi.fn(),
+    );
+
+    adapter.stop();
+    await adapter.speak(
+      {
+        type: "browser.speak",
+        sessionId: "session-discovery",
+        generationEpoch: 1,
+        sentenceIndex: 0,
+        text: "Current sentence.",
+        language: "en-US",
+        voiceId: "Current Voice",
+        playbackSpeed: 1,
+      },
+      vi.fn(),
+    );
+    finishDiscovery?.([{ voiceName: "Stale Voice", lang: "en-US" }]);
+    await first;
+
+    expect(speak).toHaveBeenCalledTimes(1);
+    expect(speak).toHaveBeenCalledWith(
+      "Current sentence.",
+      expect.objectContaining({ voiceName: "Current Voice" }),
+    );
+  });
+
+  it("ignores late events from an utterance that was replaced after pause", async () => {
+    const utterances: BrowserTtsOptions[] = [];
+    const port: BrowserTtsPort = {
+      async speak(_text, options) {
+        utterances.push(options);
+      },
+      pause: vi.fn(),
+      resume: vi.fn(),
+      stop: vi.fn(),
+    };
+    const adapter = new BrowserVoiceAdapter(port);
+    const events: unknown[] = [];
+    const effect: Extract<ReadingSessionEffect, { type: "browser.speak" }> = {
+      type: "browser.speak",
+      sessionId: "session-restart",
+      generationEpoch: 1,
+      sentenceIndex: 0,
+      text: "Restart this sentence.",
+      language: "en-US",
+      voiceId: "Word Voice",
+      playbackSpeed: 1,
+    };
+
+    await adapter.speak(effect, (event) => events.push(event));
+    adapter.pause();
+    adapter.stop();
+    await adapter.speak(effect, (event) => events.push(event));
+
+    utterances[0]?.onEvent({ type: "pause" });
+    utterances[0]?.onEvent({ type: "word", charIndex: 0, length: 7 });
+    utterances[0]?.onEvent({ type: "end" });
+    utterances[1]?.onEvent({ type: "start" });
+
+    expect(events).toEqual([{ type: "start", sentenceIndex: 0 }]);
+  });
+
   it("falls back to Chrome's default voice when voice discovery fails", async () => {
     const speak = vi.fn(async () => undefined);
     const port: BrowserTtsPort = {

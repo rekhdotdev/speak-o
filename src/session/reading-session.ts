@@ -1039,6 +1039,9 @@ export class ReadingSessionController {
       modelId: preferences.modelId,
       region: preferences.region,
     };
+    const browserConfigurationChanged =
+      active.snapshot.narrationLanguage !== narrationLanguage ||
+      active.snapshot.voiceId !== voiceId;
     const configurationChanged =
       active.settingsConfigurationAtOpen !== null &&
       (Object.keys(nextConfiguration) as Array<keyof SpeechConfiguration>).some(
@@ -1068,6 +1071,34 @@ export class ReadingSessionController {
             }),
           ]
         : [];
+    if (active.snapshot.mode === "browser" && browserConfigurationChanged) {
+      active.canResumeMedia = false;
+      const effects: ReadingSessionEffect[] = [
+        this.contextEffect(active.snapshot, { type: "browser.stop" }),
+      ];
+      if (active.snapshot.status === "playing") {
+        const sentence =
+          active.article.sentences[active.snapshot.currentSentenceIndex];
+        if (sentence) {
+          active.canResumeMedia = true;
+          effects.push(
+            this.contextEffect(active.snapshot, {
+              type: "browser.speak",
+              sentenceIndex: active.snapshot.currentSentenceIndex,
+              text: sentence.text,
+              language: active.snapshot.narrationLanguage,
+              voiceId: active.snapshot.voiceId,
+              playbackSpeed: active.snapshot.playbackSpeed,
+            }),
+          );
+        }
+      }
+      return this.transition([
+        ...effects,
+        this.renderEffect(active.snapshot),
+        this.saveDescriptorEffect(active.snapshot),
+      ]);
+    }
     if (active.snapshot.mode === "cloud" && configurationChanged) {
       for (const sentenceIndex of active.requestedSentenceIndices) {
         if (!active.bufferedAudio.has(sentenceIndex)) {

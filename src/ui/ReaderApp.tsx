@@ -296,20 +296,15 @@ export function ReaderApp({
             <NextIcon />
           </IconButton>
         </div>
-        <label className="progress-control">
-          <span className="sr-only">Reading Position</span>
-          <input
+        <div className="progress-control">
+          <progress
+            aria-label="Reading progress"
             aria-valuetext={`${progress} percent`}
-            max={Math.max(0, snapshot.sentenceCount - 1)}
-            min="0"
-            type="range"
-            value={snapshot.currentSentenceIndex}
-            onChange={(event) =>
-              command("seek", Number(event.currentTarget.value))
-            }
+            max="100"
+            value={progress}
           />
           <span className="progress-number">{progress}%</span>
-        </label>
+        </div>
         <label className="speed-control">
           <span className="sr-only">Playback Speed</span>
           <select
