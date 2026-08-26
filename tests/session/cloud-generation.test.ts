@@ -56,6 +56,12 @@ describe("Cloud Voice Generation Window", () => {
     expect(opened.effects).toContainEqual(
       expect.objectContaining({ type: "provider.pause-prefetch" }),
     );
+    const duplicateOpen = controller.dispatch({
+      type: "settings.opened",
+      sessionId: "session-settings",
+      generationEpoch: 1,
+    });
+    expect(duplicateOpen.effects).toEqual([]);
     const blocked = controller.dispatch({
       type: "play",
       sessionId: "session-settings",
@@ -63,7 +69,7 @@ describe("Cloud Voice Generation Window", () => {
     });
     expect(blocked.snapshot).toMatchObject({
       status: "paused",
-      notice: "Speech settings open; Cloud Voice preparation is paused.",
+      notice: "sessionNoticeSettingsPaused",
     });
     expect(
       blocked.effects.some((effect) => effect.type === "provider.generate"),
@@ -161,7 +167,7 @@ describe("Cloud Voice Generation Window", () => {
 
     expect(preparing.snapshot).toMatchObject({
       status: "preparing",
-      notice: "Preparing next sentence",
+      notice: "sessionNoticePreparingNext",
       submittedCharacters: 59,
     });
     expect(

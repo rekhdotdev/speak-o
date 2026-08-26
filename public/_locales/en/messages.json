@@ -15,5 +15,321 @@
   },
   "commandToggle": {
     "message": "Play or pause the active Reading Session"
+  },
+  "contextMenuReadSelection": {
+    "message": "Read Selection with Speak-O"
+  },
+  "backgroundUnsupportedPageTitle": {
+    "message": "Speak-O cannot run on this protected Chrome page or unsupported document."
+  },
+  "readerDebugModeOn": { "message": "DEBUG_MODE is on" },
+  "readerDebugLogLabel": { "message": "Speak-O debug log" },
+  "readerCopyDebugLog": { "message": "Copy debug log" },
+  "readerDebugCopied": { "message": "Copied" },
+  "readerDebugCopyFailed": { "message": "Copy failed; press Ctrl/Cmd+C" },
+  "readerDebugPrivacy": {
+    "message": "No Article text, URLs, credentials, or audio are logged"
+  },
+  "readerFinished": { "message": "Finished" },
+  "readerMinutesLeft": {
+    "message": "$minutes$ min left",
+    "placeholders": { "minutes": { "content": "$1", "example": "3" } }
+  },
+  "readerLabel": { "message": "Speak-O Article Reader" },
+  "readerFindingArticle": { "message": "Finding the Article…" },
+  "readerClose": { "message": "Close Speak-O" },
+  "readerOnboardingLabel": { "message": "Set up Speak-O" },
+  "readerPublicBeta": { "message": "Speak-O public beta" },
+  "readerOnboardingTitle": {
+    "message": "How would you like to hear this Article?"
+  },
+  "readerOnboardingDescription": {
+    "message": "Use a Chrome Voice without setup, or connect your own ElevenLabs account for Cloud Voice."
+  },
+  "readerContinueChrome": { "message": "Continue with Chrome Voice" },
+  "readerUseElevenLabs": { "message": "Use ElevenLabs" },
+  "readerConnectElevenLabs": { "message": "Connect ElevenLabs" },
+  "readerMinimizedLabel": { "message": "Speak-O minimized Article Reader" },
+  "readerPause": { "message": "Pause" },
+  "readerPlay": { "message": "Play" },
+  "readerPercentRead": {
+    "message": "$percent$ percent read",
+    "placeholders": { "percent": { "content": "$1", "example": "25" } }
+  },
+  "readerMaximize": { "message": "Maximize controls" },
+  "readerNowReading": { "message": "Now reading" },
+  "readerSelectedText": { "message": "Selected text" },
+  "readerStatusReady": { "message": "ready" },
+  "readerStatusPreparing": { "message": "preparing" },
+  "readerStatusPlaying": { "message": "playing" },
+  "readerStatusPaused": { "message": "paused" },
+  "readerStatusBuffering": { "message": "buffering" },
+  "readerStatusUsageLimit": { "message": "usage limit" },
+  "readerStatusProviderIssue": { "message": "provider issue" },
+  "readerStatusPageChanged": { "message": "page changed" },
+  "readerStatusCompleted": { "message": "completed" },
+  "readerHideHighlights": { "message": "Hide highlights" },
+  "readerShowHighlights": { "message": "Show highlights" },
+  "readerControls": { "message": "Reading controls" },
+  "readerPreviousSentence": { "message": "Previous sentence" },
+  "readerNextSentence": { "message": "Next sentence" },
+  "readerProgress": { "message": "Reading progress" },
+  "readerPercent": {
+    "message": "$percent$ percent",
+    "placeholders": { "percent": { "content": "$1", "example": "25" } }
+  },
+  "readerPlaybackSpeed": { "message": "Playback Speed" },
+  "readerCloudVoice": { "message": "Cloud Voice" },
+  "readerChromeVoice": { "message": "Chrome Voice" },
+  "readerMoreDetails": { "message": "More details" },
+  "readerMinimize": { "message": "Minimize controls" },
+  "readerCloseAndStop": { "message": "Close and stop" },
+  "readerProviderUsageActions": { "message": "Provider Usage actions" },
+  "readerContinueSession": { "message": "Continue this Session" },
+  "readerSwitchChrome": { "message": "Switch to Chrome Voice" },
+  "readerStop": { "message": "Stop" },
+  "readerSpeechRecoveryActions": { "message": "Speech recovery actions" },
+  "readerConfirmRetry": { "message": "Confirm Retry" },
+  "readerReconnectVoice": { "message": "Reconnect or change Voice" },
+  "readerChooseVoice": { "message": "Choose Voice" },
+  "readerSourceRecoveryActions": { "message": "Source Page recovery actions" },
+  "readerRestartArticle": { "message": "Restart Article" },
+  "readerContinueWithoutHighlights": {
+    "message": "Continue without highlights"
+  },
+  "sessionNoticeRestoredPaused": {
+    "message": "Paused after Chrome restored the Reading Session."
+  },
+  "sessionNoticeVoiceRequired": {
+    "message": "Choose a compatible Voice before using Cloud Voice Mode."
+  },
+  "sessionNoticeSettingsPaused": {
+    "message": "Speech settings open; Cloud Voice preparation is paused."
+  },
+  "sessionNoticePreparingNext": { "message": "Preparing next sentence" },
+  "sessionNoticeUsageGuard": {
+    "message": "Provider Usage guard reached"
+  },
+  "sessionNoticeRetryMayDuplicate": {
+    "message": "Retry may duplicate Provider Usage. Confirm Retry, switch to Chrome, or stop."
+  },
+  "sessionNoticeCloudAudioFailed": {
+    "message": "Cloud Voice audio could not continue."
+  },
+  "sessionNoticeHighlightsEnabled": {
+    "message": "Source Page highlighting enabled."
+  },
+  "sessionNoticeHighlightsHidden": {
+    "message": "Source Page highlighting hidden."
+  },
+  "sessionNoticeBufferedSettings": {
+    "message": "Buffered audio keeps its earlier Voice and Model."
+  },
+  "sessionNoticeVoiceRequiredContinue": {
+    "message": "Choose a compatible Voice before continuing Cloud Voice."
+  },
+  "sessionNoticeSettingsChangedDuringGeneration": {
+    "message": "Speech settings changed while Cloud Voice was preparing. Confirm Retry because Provider Usage may already have occurred."
+  },
+  "sessionNoticeSourceChanged": {
+    "message": "The Source Page changed. Restart, continue without highlighting, or stop."
+  },
+  "sessionNoticePaused": { "message": "Paused" },
+  "sessionNoticeChromeStopped": {
+    "message": "Chrome Voice stopped unexpectedly. Press play to restart the sentence."
+  },
+  "sessionNoticeChromeFailed": {
+    "message": "Chrome Voice could not continue."
+  },
+  "extractionNoArticleTitle": { "message": "No readable Article found" },
+  "extractionNoArticleMessage": {
+    "message": "Select the prose you want to hear, then use the Speak-O selection menu."
+  },
+  "extractionXSelectionTitle": { "message": "Select text on this X page" },
+  "extractionXSelectionMessage": {
+    "message": "Speak-O reads X Articles automatically; posts, threads, and timelines require a Selection."
+  },
+  "extractionMappingTitle": {
+    "message": "This Article could not be mapped safely"
+  },
+  "extractionMappingMessage": {
+    "message": "Select the passage you want to hear so highlighting stays exact."
+  },
+  "extractionLargeTitle": { "message": "This Article is unusually large" },
+  "extractionLargeMessage": {
+    "message": "Select a smaller passage to read it without freezing the Source Page."
+  },
+  "extractionErrorTitle": { "message": "Speak-O hit an extraction error" },
+  "extractionErrorMessage": {
+    "message": "Copy the debug log below and paste it into the issue."
+  },
+  "optionsDocumentTitle": { "message": "Speak-O settings" },
+  "optionsRootMissing": { "message": "Options root is missing" },
+  "optionsHomeLabel": { "message": "Speak-O settings home" },
+  "optionsPublicBetaVersion": { "message": "Public beta · 0.1.0" },
+  "optionsSectionsLabel": { "message": "Settings sections" },
+  "optionsSpeech": { "message": "Speech" },
+  "optionsReading": { "message": "Reading" },
+  "optionsAppearance": { "message": "Appearance" },
+  "optionsShortcuts": { "message": "Shortcuts" },
+  "optionsPrivacyDiagnostics": { "message": "Privacy & diagnostics" },
+  "optionsPublisher": { "message": "Open-source software published by Rekh." },
+  "optionsEyebrow": { "message": "Open-source BYOK Article Reader" },
+  "optionsHeading": { "message": "Make reading sound like you." },
+  "optionsIntroduction": {
+    "message": "Choose a calm Chrome Voice or connect ElevenLabs directly with your own Provider Credential. Speak-O has no account or subscription."
+  },
+  "optionsSpeechDescription": {
+    "message": "Select how Speak-O turns an Article into a controlled spoken experience."
+  },
+  "optionsElevenLabsCloudVoice": { "message": "ElevenLabs Cloud Voice" },
+  "optionsDirectByok": { "message": "Direct BYOK connection" },
+  "optionsConnected": {
+    "message": "Connected $suffix$",
+    "placeholders": { "suffix": { "content": "$1", "example": "•••• 1234" } }
+  },
+  "optionsNotConnected": { "message": "Not connected" },
+  "optionsDisconnectElevenLabs": { "message": "Disconnect ElevenLabs" },
+  "optionsProviderCredential": { "message": "Provider Credential" },
+  "optionsCredentialPlaceholder": {
+    "message": "Paste your ElevenLabs API key"
+  },
+  "optionsHide": { "message": "Hide" },
+  "optionsReveal": { "message": "Reveal" },
+  "optionsRememberDevice": { "message": "Remember on this device" },
+  "optionsRememberDescription": {
+    "message": "Chrome profile storage protects a remembered key; Speak-O does not add application-level encryption."
+  },
+  "optionsConnecting": { "message": "Connecting…" },
+  "optionsConnectElevenLabs": { "message": "Connect ElevenLabs" },
+  "optionsNarrationLanguage": { "message": "Narration Language" },
+  "optionsDetectLanguage": { "message": "Detect from each Article" },
+  "optionsDefaultVoiceMode": { "message": "Default Voice Mode" },
+  "optionsChromeVoice": { "message": "Chrome Voice" },
+  "optionsCloudVoice": { "message": "Cloud Voice" },
+  "optionsAutomaticVoice": {
+    "message": "Automatic · word highlighting when supported · $language$",
+    "placeholders": { "language": { "content": "$1", "example": "en-US" } }
+  },
+  "optionsVoiceLanguageSuffix": {
+    "message": " · $language$",
+    "placeholders": { "language": { "content": "$1", "example": "en-US" } }
+  },
+  "optionsWordHighlightingSuffix": { "message": " · word highlighting" },
+  "optionsSentenceHighlightingSuffix": {
+    "message": " · sentence highlighting only"
+  },
+  "optionsRemoteVoiceSuffix": { "message": " · may use a remote service" },
+  "optionsPlaybackSpeed": { "message": "Playback Speed" },
+  "optionsApiRegion": { "message": "Advanced API Region" },
+  "optionsRegionGlobal": { "message": "Global" },
+  "optionsRegionUs": { "message": "United States" },
+  "optionsRegionEu": { "message": "European Union residency" },
+  "optionsRegionIndia": { "message": "India residency" },
+  "optionsRegionSingapore": { "message": "Singapore residency" },
+  "optionsModel": { "message": "Model" },
+  "optionsSearchVoices": { "message": "Search Voices" },
+  "optionsVoiceSearchPlaceholder": { "message": "Name, accent, or label" },
+  "optionsAvailableVoices": { "message": "Available ElevenLabs Voices" },
+  "optionsElevenLabsVoice": { "message": "ElevenLabs Voice" },
+  "optionsSelected": { "message": "Selected" },
+  "optionsChoose": { "message": "Choose" },
+  "optionsPreviewVoiceLabel": {
+    "message": "Preview $voice$ using ElevenLabs media",
+    "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
+  },
+  "optionsPreview": { "message": "Preview" },
+  "optionsPreviewUnavailable": {
+    "message": "Preview unavailable; Speak-O will not generate a paid preview."
+  },
+  "optionsReadingDescription": {
+    "message": "Keep Reading Position and visual orientation under your control."
+  },
+  "optionsHighlightActive": { "message": "Highlight active text" },
+  "optionsHighlightDescription": {
+    "message": "Use exact CSS Highlight ranges on the original Source Page."
+  },
+  "optionsFollowSentence": { "message": "Follow the active sentence" },
+  "optionsFollowDescription": {
+    "message": "Scroll only when the current sentence leaves a comfortable viewport area."
+  },
+  "optionsUsageGuard": { "message": "Provider Usage guard" },
+  "optionsUsageGuardDescription": {
+    "message": "Pause before submitting more source characters in one Cloud Voice Reading Session."
+  },
+  "optionsDisabled": { "message": "Disabled" },
+  "optionsAppearanceDescription": {
+    "message": "Use a neutral interface that stays independent from the Source Page."
+  },
+  "optionsTheme": { "message": "Theme" },
+  "optionsThemeSystem": { "message": "System" },
+  "optionsThemeLight": { "message": "Light" },
+  "optionsThemeDark": { "message": "Dark" },
+  "optionsFloatingDock": { "message": "Floating bar dock" },
+  "optionsDockBottom": { "message": "Bottom center" },
+  "optionsDockTop": { "message": "Top center" },
+  "optionsShortcutsDescription": {
+    "message": "Chrome owns global assignments and reports conflicts or missing keys."
+  },
+  "optionsNotAssigned": { "message": "Not assigned" },
+  "optionsOpenShortcuts": { "message": "Open Chrome extension shortcuts" },
+  "optionsPrivacyDescription": {
+    "message": "Speak-O keeps Rekh outside the Article and Provider Credential data path."
+  },
+  "optionsPrivacySummary": {
+    "message": "Rekh receives no Article text, Provider Credentials, Provider Usage, diagnostics, or behavioral data."
+  },
+  "optionsPrivacyDetail": {
+    "message": "Chrome Voice Mode creates no Speech Provider request from Speak-O. Cloud Voice Mode sends only the submitted source text directly to ElevenLabs using your credential. Preferences stay in local extension storage; active audio uses session storage and is cleared by Chrome when the extension session ends."
+  },
+  "optionsElevenLabsPrivacy": { "message": "Read ElevenLabs privacy material" },
+  "optionsCopyDiagnostics": { "message": "Copy redacted diagnostics" },
+  "optionsFooterTitle": { "message": "Speak-O 0.1.0 public beta" },
+  "optionsFooterDetail": {
+    "message": "Apache-2.0 · Published by Rekh · No Speak-O account required"
+  },
+  "optionsPreferencesSaved": { "message": "Preferences saved locally." },
+  "optionsPreferencesSaveFailed": {
+    "message": "Preferences could not be saved. Try again."
+  },
+  "optionsInvalidNarrationLanguage": {
+    "message": "Use a valid language tag such as en or en-US."
+  },
+  "optionsInvalidUsageGuard": {
+    "message": "Use a whole number from 500 to 500000, or leave it blank."
+  },
+  "optionsInvalidCredential": {
+    "message": "Enter a valid ElevenLabs API key."
+  },
+  "optionsRequestingAccess": {
+    "message": "Requesting access to the selected API Region…"
+  },
+  "optionsAccessDenied": {
+    "message": "Access was not granted. Speak-O did not save the key."
+  },
+  "optionsConnectionFailed": {
+    "message": "ElevenLabs could not be connected."
+  },
+  "optionsAllowSelectedRegion": {
+    "message": "Allow the selected ElevenLabs API Region first."
+  },
+  "optionsProviderAuthFailed": {
+    "message": "ElevenLabs rejected the Provider Credential."
+  },
+  "optionsProviderRateLimited": {
+    "message": "ElevenLabs rate limited the metadata request."
+  },
+  "optionsProviderUnavailable": {
+    "message": "ElevenLabs metadata is currently unavailable."
+  },
+  "optionsConnectionSucceeded": { "message": "ElevenLabs connected." },
+  "optionsDisconnected": {
+    "message": "ElevenLabs disconnected and local provider data cleared."
+  },
+  "optionsNoDiagnostics": {
+    "message": "No active Reading Session is available for diagnostics."
+  },
+  "optionsDiagnosticsCopied": {
+    "message": "Redacted diagnostics copied. No Article text, key, audio, or URL was included."
   }
 }

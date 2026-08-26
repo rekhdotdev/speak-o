@@ -4,6 +4,7 @@ import {
 } from "../src/adapters/browser-voice";
 import {
   isArticleSnapshot,
+  isCommandContext,
   isExtensionMessage,
   isPlaybackSpeed,
   isReadingSessionDescriptor,
@@ -18,6 +19,7 @@ import {
   type RuntimeDebugEntry,
   type RuntimeDebugScope,
 } from "../src/diagnostics/runtime-debug";
+import { buildRuntimeDiagnosticEvidence } from "../src/diagnostics/diagnostics";
 import { sendOptionalRuntimeMessage } from "../src/runtime/safe-runtime-message";
 import {
   ElevenLabsMetadataClient,
@@ -25,14 +27,17 @@ import {
   elevenLabsOriginPattern,
 } from "../src/provider/elevenlabs";
 import { ReadingSessionController } from "../src/session/reading-session";
+import { SerialTaskQueue } from "../src/session/serial-task-queue";
 import { SessionBuffer } from "../src/session/session-buffer";
 import {
   rebaseSessionCommandAfterRecovery,
   StartupBarrier,
+  togglePlaybackAfterRecovery,
 } from "../src/session/startup-barrier";
 import { StopBarrier } from "../src/session/stop-barrier";
 import type {
   AudioEvent,
+  CommandContext,
   ProviderEvent,
   ReadingSessionCommand,
   ReadingSessionDescriptor,
@@ -43,11 +48,15 @@ import {
   type ProtectedStorageArea,
 } from "../src/storage/provider-credentials";
 import {
+  isPreferencePatch,
   PreferenceStore,
   type ElevenLabsRegion,
   type ExtensionStorageArea,
+  type Preferences,
   type VoiceMode,
 } from "../src/storage/preferences";
+import { persistSessionPreferenceIfCurrent } from "../src/storage/session-preferences";
+import { message as localizedMessage } from "../src/i18n";
 
 const CONTEXT_MENU_ID = "speak-o-read-selection";
 const SESSION_DESCRIPTOR_KEY = "activeSessionDescriptor";
@@ -100,6 +109,8 @@ export default defineBackground(() => {
   const metadataClient = new ElevenLabsMetadataClient();
   const providerTransport = new ElevenLabsTransport();
   const sessionBuffer = new SessionBuffer();
+  const transitionEffects = new SerialTaskQueue();
+  const preferenceUpdates = new SerialTaskQueue();
   const stopBarrier = new StopBarrier();
   const sessionTargets = new Map<string, ContentTarget>();
   const debug = new RuntimeDebugBuffer();
@@ -108,6 +119,10 @@ export default defineBackground(() => {
   let settlePendingReconciliation: (() => void) | null = null;
   let sentenceStartedAt = 0;
   let lastDebugWordKey = "";
+  let activeArticle: {
+    sessionId: string;
+    article: ArticleSnapshot;
+  } | null = null;
 
   debug.record("background", "service-worker.started", {
     extensionVersion: chrome.runtime.getManifest().version,
@@ -348,7 +363,12 @@ export default defineBackground(() => {
       { version: 1, target: "offscreen", ...message },
     );
 
-  const executeTransition = async (transition: ReadingSessionTransition) => {
+  const executeTransition = (transition: ReadingSessionTransition) =>
+    transitionEffects.run(() => performTransition(transition));
+
+  async function performTransition(
+    transition: ReadingSessionTransition,
+  ): Promise<void> {
     for (const effect of transition.effects) {
       const target = sessionTargets.get(effect.sessionId);
       try {
@@ -469,7 +489,7 @@ export default defineBackground(() => {
           case "provider.generate": {
             const credential = await credentials.load();
             if (!credential) {
-              await executeTransition(
+              await performTransition(
                 controller.dispatch({
                   type: "provider.event",
                   sessionId: effect.sessionId,
@@ -633,10 +653,12 @@ export default defineBackground(() => {
       }
     }
     if (!transition.snapshot) {
-      for (const effect of transition.effects)
+      for (const effect of transition.effects) {
         sessionTargets.delete(effect.sessionId);
+        if (activeArticle?.sessionId === effect.sessionId) activeArticle = null;
+      }
     }
-  };
+  }
 
   const startSession = async (
     article: ArticleSnapshot,
@@ -664,7 +686,10 @@ export default defineBackground(() => {
       mode,
       preferences: currentPreferences,
     });
-    if (transition.snapshot) sessionTargets.set(transition.snapshot.id, target);
+    if (transition.snapshot) {
+      sessionTargets.set(transition.snapshot.id, target);
+      activeArticle = { sessionId: transition.snapshot.id, article };
+    }
     emitDebug(
       "background",
       "session.activate.dispatched",
@@ -676,8 +701,9 @@ export default defineBackground(() => {
       },
       target,
     );
+    const activationEffects = executeTransition(transition);
     await chrome.storage.local.set({ [FIRST_USE_KEY]: true });
-    await executeTransition(transition);
+    await activationEffects;
     if (replacedSessionId) sessionTargets.delete(replacedSessionId);
     if (transition.snapshot) {
       emitDebug(
@@ -751,8 +777,7 @@ export default defineBackground(() => {
       await chrome.action.setBadgeText({ tabId: target.tabId, text: "!" });
       await chrome.action.setTitle({
         tabId: target.tabId,
-        title:
-          "Speak-O cannot run on this protected Chrome page or unsupported document.",
+        title: localizedMessage("backgroundUnsupportedPageTitle"),
       });
     }
   };
@@ -962,6 +987,26 @@ export default defineBackground(() => {
       return;
     }
     if (command) {
+      if (
+        command.type === "set-playback-speed" ||
+        command.type === "set-highlights"
+      ) {
+        observeTask(
+          `session-command:${command.type}`,
+          senderTarget,
+          preferenceUpdates.run(async () => {
+            const current = controller.currentSnapshot();
+            const persisted = await persistSessionPreferenceIfCurrent(
+              preferences,
+              command,
+              current,
+            );
+            if (!persisted) return;
+            await executeTransition(controller.dispatch(command));
+          }),
+        );
+        return;
+      }
       observeTask(
         `session-command:${command.type}`,
         senderTarget,
@@ -970,73 +1015,96 @@ export default defineBackground(() => {
     }
   };
 
-  const settingsOpened = () => {
+  const matchesCurrentSession = (context: CommandContext): boolean => {
     const snapshot = controller.currentSnapshot();
-    if (!snapshot) return;
+    return (
+      snapshot !== null &&
+      context.sessionId === snapshot.id &&
+      context.generationEpoch === snapshot.generationEpoch
+    );
+  };
+
+  const settingsOpened = (context: CommandContext) => {
+    if (!matchesCurrentSession(context)) return;
     void executeTransition(
       controller.dispatch({
         type: "settings.opened",
-        sessionId: snapshot.id,
-        generationEpoch: snapshot.generationEpoch,
+        ...context,
       }),
     );
   };
 
-  const settingsClosed = () => {
-    const snapshot = controller.currentSnapshot();
-    if (!snapshot) return;
-    void preferences.load().then((currentPreferences) =>
-      executeTransition(
-        controller.dispatch({
-          type: "settings.closed",
-          sessionId: snapshot.id,
-          generationEpoch: snapshot.generationEpoch,
-          preferences: currentPreferences,
-        }),
-      ),
-    );
-  };
-
-  const settingsChanged = () => {
-    const snapshot = controller.currentSnapshot();
-    if (!snapshot) return;
-    void preferences.load().then(async (currentPreferences) => {
-      const current = controller.currentSnapshot();
-      if (
-        !current ||
-        current.id !== snapshot.id ||
-        current.generationEpoch !== snapshot.generationEpoch
-      ) {
-        return;
-      }
+  const settingsClosed = (context: CommandContext) => {
+    void preferenceUpdates.run(async () => {
+      const currentPreferences = await preferences.load();
+      if (!matchesCurrentSession(context)) return;
       await executeTransition(
         controller.dispatch({
           type: "settings.closed",
-          sessionId: current.id,
-          generationEpoch: current.generationEpoch,
+          ...context,
           preferences: currentPreferences,
         }),
       );
-      const updated = controller.currentSnapshot();
-      if (
-        updated?.id === snapshot.id &&
-        updated.generationEpoch === snapshot.generationEpoch
-      ) {
-        await executeTransition(
-          controller.dispatch({
-            type: "settings.opened",
-            sessionId: updated.id,
-            generationEpoch: updated.generationEpoch,
-          }),
-        );
-      }
+    });
+  };
+
+  const applyChangedSettings = async (
+    context: CommandContext,
+    currentPreferences: Preferences,
+  ) => {
+    if (!matchesCurrentSession(context)) return;
+    await executeTransition(
+      controller.dispatch({
+        type: "settings.closed",
+        ...context,
+        preferences: currentPreferences,
+      }),
+    );
+    if (matchesCurrentSession(context)) {
+      await executeTransition(
+        controller.dispatch({
+          type: "settings.opened",
+          ...context,
+        }),
+      );
+    }
+  };
+
+  const settingsChanged = (context: CommandContext) => {
+    if (!matchesCurrentSession(context)) return;
+    void preferenceUpdates.run(async () => {
+      const currentPreferences = await preferences.load();
+      await applyChangedSettings(context, currentPreferences);
     });
   };
 
   chrome.runtime.onConnect.addListener((port) => {
-    if (port.name !== "speech-settings") return;
-    settingsOpened();
-    port.onDisconnect.addListener(settingsClosed);
+    if (
+      port.name !== "speech-settings" ||
+      port.sender?.id !== chrome.runtime.id
+    ) {
+      return;
+    }
+    let boundContext: CommandContext | null = null;
+    port.onMessage.addListener((message: unknown) => {
+      if (
+        !isExtensionMessage(message) ||
+        message.target !== "background" ||
+        message.type !== "settings.open" ||
+        !isCommandContext(message) ||
+        !matchesCurrentSession(message)
+      ) {
+        return;
+      }
+      boundContext = {
+        sessionId: message.sessionId,
+        generationEpoch: message.generationEpoch,
+      };
+      settingsOpened(boundContext);
+    });
+    port.onDisconnect.addListener(() => {
+      if (boundContext) settingsClosed(boundContext);
+    });
   });
 
   chrome.runtime.onMessage.addListener(
@@ -1114,6 +1182,7 @@ export default defineBackground(() => {
             });
             if (transition.snapshot) {
               sessionTargets.set(transition.snapshot.id, senderTarget);
+              activeArticle = { sessionId: transition.snapshot.id, article };
             }
             recoveryDescriptor = null;
             await executeTransition(transition);
@@ -1239,10 +1308,10 @@ export default defineBackground(() => {
         }
         return handleSessionCommand(message, senderTarget, sendResponse);
       } else if (message.type === "settings.open") {
-        settingsOpened();
+        if (isCommandContext(message)) settingsOpened(message);
         void chrome.runtime.openOptionsPage();
       } else if (message.type === "settings.changed") {
-        settingsChanged();
+        if (isCommandContext(message)) settingsChanged(message);
       } else if (message.type === "source.changed") {
         const snapshot = controller.currentSnapshot();
         if (
@@ -1325,18 +1394,65 @@ export default defineBackground(() => {
         }
       } else if (message.type === "options.get-state") {
         void (async () => {
-          const [connection, storedMetadata] = await Promise.all([
-            credentials.describe(),
-            chrome.storage.local.get(PROVIDER_METADATA_KEY),
-          ]);
+          const [connection, storedMetadata, currentPreferences] =
+            await Promise.all([
+              credentials.describe(),
+              chrome.storage.local.get(PROVIDER_METADATA_KEY),
+              preferences.load(),
+            ]);
           sendResponse({
             connection,
+            preferences: currentPreferences,
             metadata: storedMetadata[PROVIDER_METADATA_KEY] ?? {
               voices: [],
               models: [],
             },
+            sessionContext: (() => {
+              const snapshot = controller.currentSnapshot();
+              return snapshot
+                ? {
+                    sessionId: snapshot.id,
+                    generationEpoch: snapshot.generationEpoch,
+                  }
+                : null;
+            })(),
+            diagnosticsEvidence: (() => {
+              const snapshot = controller.currentSnapshot();
+              return snapshot && activeArticle?.sessionId === snapshot.id
+                ? buildRuntimeDiagnosticEvidence(
+                    activeArticle.article,
+                    snapshot,
+                  )
+                : null;
+            })(),
           });
         })();
+        return true;
+      } else if (
+        message.type === "preferences.patch" &&
+        isPreferencePatch(message.patch)
+      ) {
+        const preferencePatch = message.patch;
+        const context = isCommandContext(message)
+          ? {
+              sessionId: message.sessionId,
+              generationEpoch: message.generationEpoch,
+            }
+          : null;
+        void preferenceUpdates.run(async () => {
+          try {
+            const currentPreferences = await preferences.patch(preferencePatch);
+            if (context) {
+              await applyChangedSettings(context, currentPreferences);
+            }
+            sendResponse({ ok: true, preferences: currentPreferences });
+          } catch (error) {
+            emitDebug("background", "preferences.patch.error", {
+              error: summarizeDebugError(error),
+            });
+            sendResponse({ ok: false });
+          }
+        });
         return true;
       } else if (
         message.type === "provider.connect" &&
@@ -1352,9 +1468,11 @@ export default defineBackground(() => {
               origins: [origin],
             });
             if (!permitted) {
-              throw new Error(
-                "Allow the selected ElevenLabs API Region first.",
-              );
+              sendResponse({
+                ok: false,
+                message: localizedMessage("optionsAllowSelectedRegion"),
+              });
+              return;
             }
             const providerMetadata = await metadataClient.validateAndLoad(
               message.credential as string,
@@ -1385,12 +1503,21 @@ export default defineBackground(() => {
               await chrome.storage.session.remove(PENDING_CLOUD_KEY);
             }
           } catch (error) {
+            const errorCode =
+              isRecord(error) && typeof error.code === "string"
+                ? error.code
+                : null;
+            const messageKey =
+              errorCode === "AUTH_FAILED"
+                ? "optionsProviderAuthFailed"
+                : errorCode === "RATE_LIMITED"
+                  ? "optionsProviderRateLimited"
+                  : errorCode === "PROVIDER_UNAVAILABLE"
+                    ? "optionsProviderUnavailable"
+                    : "optionsConnectionFailed";
             sendResponse({
               ok: false,
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "ElevenLabs could not be connected.",
+              message: localizedMessage(messageKey),
             });
           }
         })();
@@ -1431,14 +1558,14 @@ export default defineBackground(() => {
       return;
     }
     if (command === "toggle-playback") {
-      const snapshot = controller.currentSnapshot();
-      if (!snapshot) return;
-      void executeTransition(
-        controller.dispatch({
-          type: snapshot.status === "playing" ? "pause" : "play",
-          sessionId: snapshot.id,
-          generationEpoch: snapshot.generationEpoch,
-        }),
+      observeTask(
+        "command-toggle-playback",
+        null,
+        togglePlaybackAfterRecovery(
+          startupBarrier,
+          () => controller.currentSnapshot(),
+          (toggle) => executeTransition(controller.dispatch(toggle)),
+        ),
       );
     }
   });
@@ -1468,7 +1595,7 @@ export default defineBackground(() => {
     void chrome.contextMenus.removeAll().then(() => {
       chrome.contextMenus.create({
         id: CONTEXT_MENU_ID,
-        title: "Read Selection with Speak-O",
+        title: localizedMessage("contextMenuReadSelection"),
         contexts: ["selection"],
       });
     });

@@ -1,10 +1,15 @@
 import type { ArticleSnapshot } from "../extraction/types";
 import type { SessionBufferEntry } from "../session/session-buffer";
 import type {
+  CommandContext,
   ReadingSessionDescriptor,
   SpeechAlignment,
 } from "../session/types";
-import { PLAYBACK_SPEEDS, type PlaybackSpeed } from "../storage/preferences";
+import {
+  isPreferencePatch,
+  PLAYBACK_SPEEDS,
+  type PlaybackSpeed,
+} from "../storage/preferences";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -16,6 +21,16 @@ export function isPlaybackSpeed(value: unknown): value is PlaybackSpeed {
 
 function validText(value: unknown, maximum: number): value is string {
   return typeof value === "string" && value.length <= maximum;
+}
+
+export function isCommandContext(value: unknown): value is CommandContext {
+  return (
+    isRecord(value) &&
+    validText(value.sessionId, 128) &&
+    value.sessionId.length > 0 &&
+    Number.isSafeInteger(value.generationEpoch) &&
+    (value.generationEpoch as number) >= 0
+  );
 }
 
 function validMappingIds(value: unknown): value is string[] {
@@ -208,6 +223,7 @@ export function isExtensionMessage(
       "source.navigated",
       "audio.event",
       "options.get-state",
+      "preferences.patch",
       "provider.connect",
       "provider.disconnect",
       "settings.open",
@@ -233,5 +249,20 @@ export function isExtensionMessage(
       "audio.set-rate",
     ],
   };
-  return allowedTypes[value.target]?.includes(value.type) === true;
+  if (allowedTypes[value.target]?.includes(value.type) !== true) return false;
+  if (
+    value.target === "background" &&
+    (value.type === "settings.open" || value.type === "settings.changed")
+  ) {
+    return isCommandContext(value);
+  }
+  if (value.target === "background" && value.type === "preferences.patch") {
+    const hasSessionContext =
+      value.sessionId !== undefined || value.generationEpoch !== undefined;
+    return (
+      isPreferencePatch(value.patch) &&
+      (!hasSessionContext || isCommandContext(value))
+    );
+  }
+  return true;
 }

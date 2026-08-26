@@ -1,14 +1,15 @@
-# Screenshot verification matrix
+# Screenshot verification
 
-Release screenshots are captured from deterministic synthetic Article fixtures, never from private or unsanitized pages. Capture at device scale factor 1 unless the scenario specifies otherwise.
+`npm run test:e2e` builds the production extension and runs the unpacked-Chromium evidence seam against `tests/e2e/fixtures/article.html`. The fixture is synthetic, so screenshots never contain private or unsanitized pages. Production builds keep `DEBUG_MODE` off; use `WXT_DEBUG_MODE=true npm run build` only when deliberately producing a diagnostic build.
 
-- Bottom and top dock: ready and playing
-- Minimized and expanded controls
-- Light, dark, and system themes
-- Narrow 360 px viewport and 200 percent browser zoom
-- Buffering, Provider Usage guard, provider issue, and Source Page changed recovery
-- First-use onboarding and Voice picker
-- Options sections at desktop and narrow widths
-- Forced colors and RTL-derived interface strings
+The automated run captures:
 
-Review each image for Source Page interference, overlap, clipping, target size, focus visibility, contrast, hierarchy, and disclosure accuracy. Generated screenshots are release evidence and are not bundled into the extension ZIP.
+- first-use onboarding reached through the command-equivalent injection and extraction path (headless Chromium does not route synthetic keyboard events through `chrome.commands`);
+- bottom-docked light controls with native read-only `<progress>`;
+- the expanded detail row;
+- minimized controls with the focused play/pause action and visible maximize action;
+- top-docked dark controls with sentence and nested current-word highlights.
+
+The Playwright HTML report, screenshots, and failure traces are retained by CI and tagged-release workflows. They are release evidence and are not bundled into the extension ZIP.
+
+Review the images for Source Page interference, overlap, clipping, target size, focus visibility, contrast, hierarchy, and disclosure accuracy. Keep native toolbar clicks, context menus, installed OS voices, audible speech timing, long-idle service-worker recovery, narrow/zoomed layouts, forced colors, RTL strings, options-page sizing, Cloud Voice, and provider recovery states in the manual release checklist until each has its own deterministic seam.

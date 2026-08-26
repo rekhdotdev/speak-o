@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DEBUG_MODE } from "../diagnostics/runtime-debug";
-import type { ReadingSessionSnapshot } from "../session/types";
+import { interfaceDirection, message, type MessageKey } from "../i18n";
+import type {
+  ReadingSessionSnapshot,
+  ReadingSessionStatus,
+} from "../session/types";
 import {
   PLAYBACK_SPEEDS,
   type PlaybackSpeed,
@@ -57,24 +61,24 @@ function DebugPanel({ log, dock }: { log: string; dock: "top" | "bottom" }) {
 
   return (
     <details className={`debug-panel debug-panel-${dock}`} open>
-      <summary>DEBUG_MODE is on</summary>
+      <summary>{message("readerDebugModeOn")}</summary>
       <textarea
         ref={textArea}
-        aria-label="Speak-O debug log"
+        aria-label={message("readerDebugLogLabel")}
         readOnly
         spellCheck={false}
         value={log}
       />
       <div className="debug-actions">
         <button type="button" onClick={() => void copy()}>
-          Copy debug log
+          {message("readerCopyDebugLog")}
         </button>
         <span role="status">
           {copyStatus === "copied"
-            ? "Copied"
+            ? message("readerDebugCopied")
             : copyStatus === "failed"
-              ? "Copy failed; press Ctrl/Cmd+C"
-              : "No Article text, URLs, credentials, or audio are logged"}
+              ? message("readerDebugCopyFailed")
+              : message("readerDebugPrivacy")}
         </span>
       </div>
     </details>
@@ -82,9 +86,25 @@ function DebugPanel({ log, dock }: { log: string; dock: "top" | "bottom" }) {
 }
 
 function formatRemaining(seconds: number): string {
-  if (seconds <= 0) return "Finished";
+  if (seconds <= 0) return message("readerFinished");
   const minutes = Math.max(1, Math.ceil(seconds / 60));
-  return `${minutes} min left`;
+  return message("readerMinutesLeft", minutes);
+}
+
+const statusMessageKeys: Record<ReadingSessionStatus, MessageKey> = {
+  ready: "readerStatusReady",
+  preparing: "readerStatusPreparing",
+  playing: "readerStatusPlaying",
+  paused: "readerStatusPaused",
+  buffering: "readerStatusBuffering",
+  "usage-limit": "readerStatusUsageLimit",
+  "provider-issue": "readerStatusProviderIssue",
+  "page-changed": "readerStatusPageChanged",
+  completed: "readerStatusCompleted",
+};
+
+function statusLabel(status: ReadingSessionStatus): string {
+  return message(statusMessageKeys[status]);
 }
 
 function IconButton({
@@ -93,15 +113,18 @@ function IconButton({
   children,
   onClick,
   disabled,
+  buttonRef,
 }: {
   label: string;
   className?: string;
   children: React.ReactNode;
   onClick(): void;
   disabled?: boolean;
+  buttonRef?: React.Ref<HTMLButtonElement>;
 }) {
   return (
     <button
+      ref={buttonRef}
       aria-label={label}
       className={`icon-button ${className}`}
       disabled={disabled}
@@ -125,24 +148,32 @@ export function ReaderApp({
   const [expanded, setExpanded] = useState(false);
   const moreButton = useRef<HTMLButtonElement>(null);
   const compactPlayButton = useRef<HTMLButtonElement>(null);
+  const mainPlayButton = useRef<HTMLButtonElement>(null);
+  const wasMinimized = useRef(false);
   const snapshot = state.kind === "session" ? state.snapshot : null;
   const playing = snapshot?.status === "playing";
   const progress = snapshot?.progressPercent ?? 0;
+  const localizedNotice = snapshot?.notice ? message(snapshot.notice) : "";
   const statusAnnouncement = useMemo(() => {
     if (!snapshot) return "";
-    if (snapshot.notice) return snapshot.notice;
+    if (localizedNotice) return localizedNotice;
     if (
       ["paused", "preparing", "provider-issue", "page-changed"].includes(
         snapshot.status,
       )
     ) {
-      return snapshot.status.replace("-", " ");
+      return statusLabel(snapshot.status);
     }
     return "";
-  }, [snapshot]);
+  }, [localizedNotice, snapshot]);
 
   useEffect(() => {
-    if (minimized) compactPlayButton.current?.focus();
+    if (minimized) {
+      compactPlayButton.current?.focus();
+    } else if (wasMinimized.current) {
+      mainPlayButton.current?.focus();
+    }
+    wasMinimized.current = minimized;
   }, [minimized]);
 
   const command = (name: string, value?: number) => {
@@ -158,14 +189,15 @@ export function ReaderApp({
       return;
     }
     if (
-      target.matches(
-        "button, a, input, select, textarea, [contenteditable='true']",
+      target.closest(
+        "input, select, textarea, [contenteditable]:not([contenteditable='false'])",
       )
     ) {
       return;
     }
     if (!snapshot) return;
     if (event.key === " ") {
+      if (target.closest("button, a[href]")) return;
       event.preventDefault();
       command("toggle");
     } else if (event.key === "ArrowLeft") {
@@ -197,13 +229,14 @@ export function ReaderApp({
     return renderWithDebug(
       <section
         className="reader-shell finding"
-        aria-label="Speak-O Article Reader"
+        aria-label={message("readerLabel")}
         aria-live="polite"
+        dir={interfaceDirection()}
       >
         <span className="brand-mark" aria-hidden="true">
           S
         </span>
-        <span>Finding the Article…</span>
+        <span>{message("readerFindingArticle")}</span>
       </section>,
     );
   }
@@ -212,13 +245,17 @@ export function ReaderApp({
     return renderWithDebug(
       <section
         className="reader-shell error-card"
-        aria-label="Speak-O Article Reader"
+        aria-label={message("readerLabel")}
+        dir={interfaceDirection()}
       >
         <div>
           <strong>{state.title}</strong>
           <p>{state.message}</p>
         </div>
-        <IconButton label="Close Speak-O" onClick={() => command("close")}>
+        <IconButton
+          label={message("readerClose")}
+          onClick={() => command("close")}
+        >
           <CloseIcon />
         </IconButton>
       </section>,
@@ -227,14 +264,15 @@ export function ReaderApp({
 
   if (state.kind === "onboarding") {
     return renderWithDebug(
-      <section className="reader-shell onboarding" aria-label="Set up Speak-O">
+      <section
+        className="reader-shell onboarding"
+        aria-label={message("readerOnboardingLabel")}
+        dir={interfaceDirection()}
+      >
         <div className="onboarding-copy">
-          <span className="eyebrow">Speak-O public beta</span>
-          <h2>How would you like to hear this Article?</h2>
-          <p>
-            Use a Chrome Voice without setup, or connect your own ElevenLabs
-            account for Cloud Voice.
-          </p>
+          <span className="eyebrow">{message("readerPublicBeta")}</span>
+          <h2>{message("readerOnboardingTitle")}</h2>
+          <p>{message("readerOnboardingDescription")}</p>
         </div>
         <div className="onboarding-actions">
           <button
@@ -242,14 +280,18 @@ export function ReaderApp({
             type="button"
             onClick={() => onChooseMode("browser")}
           >
-            Continue with Chrome Voice
+            {message("readerContinueChrome")}
           </button>
           <button
             className="secondary-button"
             type="button"
             onClick={() => onChooseMode("cloud")}
           >
-            {state.providerConnected ? "Use ElevenLabs" : "Connect ElevenLabs"}
+            {message(
+              state.providerConnected
+                ? "readerUseElevenLabs"
+                : "readerConnectElevenLabs",
+            )}
           </button>
         </div>
       </section>,
@@ -265,15 +307,17 @@ export function ReaderApp({
       <section
         className={`reader-shell compact dock-${dock}`}
         data-theme={theme}
-        aria-label="Speak-O minimized Article Reader"
+        aria-label={message("readerMinimizedLabel")}
+        dir={interfaceDirection()}
+        tabIndex={0}
         onKeyDown={handleKeyDown}
       >
-        <span className="brand-mark" aria-label="Speak-O">
+        <span className="brand-mark" aria-label={message("extensionName")}>
           S
         </span>
         <button
           ref={compactPlayButton}
-          aria-label={playing ? "Pause" : "Play"}
+          aria-label={message(playing ? "readerPause" : "readerPlay")}
           className="compact-play"
           type="button"
           onClick={() => command("toggle")}
@@ -282,12 +326,12 @@ export function ReaderApp({
         </button>
         <span
           className="progress-number"
-          aria-label={`${progress} percent read`}
+          aria-label={message("readerPercentRead", progress)}
         >
           {progress}%
         </span>
         <IconButton
-          label="Maximize controls"
+          label={message("readerMaximize")}
           onClick={() => setMinimized(false)}
         >
           <MaximizeIcon />
@@ -300,18 +344,22 @@ export function ReaderApp({
     <section
       className={`reader-shell dock-${dock}`}
       data-theme={theme}
-      aria-label="Speak-O Article Reader"
+      aria-label={message("readerLabel")}
+      dir={interfaceDirection()}
+      tabIndex={0}
       onKeyDown={handleKeyDown}
     >
       {expanded ? (
         <div className="detail-row">
           <div className="article-detail">
-            <span className="eyebrow">Now reading</span>
-            <strong dir="auto">{snapshot.title ?? "Selected text"}</strong>
+            <span className="eyebrow">{message("readerNowReading")}</span>
+            <strong dir="auto">
+              {snapshot.title ?? message("readerSelectedText")}
+            </strong>
           </div>
           <span>{formatRemaining(snapshot.estimatedRemainingSeconds)}</span>
           <span className={`status-pill status-${snapshot.status}`}>
-            {snapshot.status.replace("-", " ")}
+            {statusLabel(snapshot.status)}
           </span>
           <button
             className="detail-action"
@@ -320,24 +368,35 @@ export function ReaderApp({
               command("set-highlights", snapshot.highlightsEnabled ? 0 : 1)
             }
           >
-            {snapshot.highlightsEnabled ? "Hide highlights" : "Show highlights"}
+            {message(
+              snapshot.highlightsEnabled
+                ? "readerHideHighlights"
+                : "readerShowHighlights",
+            )}
           </button>
         </div>
       ) : null}
       <div className="main-row">
-        <span className="brand-mark desktop-brand" aria-label="Speak-O">
+        <span
+          className="brand-mark desktop-brand"
+          aria-label={message("extensionName")}
+        >
           S
         </span>
-        <div className="transport-controls" aria-label="Reading controls">
+        <div
+          className="transport-controls"
+          aria-label={message("readerControls")}
+        >
           <IconButton
-            label="Previous sentence"
+            label={message("readerPreviousSentence")}
             onClick={() => command("previous")}
           >
             <PreviousIcon />
           </IconButton>
           <IconButton
-            label={playing ? "Pause" : "Play"}
+            label={message(playing ? "readerPause" : "readerPlay")}
             className="play-button"
+            buttonRef={mainPlayButton}
             onClick={() => command("toggle")}
           >
             <span
@@ -351,23 +410,26 @@ export function ReaderApp({
               <PauseIcon />
             </span>
           </IconButton>
-          <IconButton label="Next sentence" onClick={() => command("next")}>
+          <IconButton
+            label={message("readerNextSentence")}
+            onClick={() => command("next")}
+          >
             <NextIcon />
           </IconButton>
         </div>
         <div className="progress-control">
           <progress
-            aria-label="Reading progress"
-            aria-valuetext={`${progress} percent`}
+            aria-label={message("readerProgress")}
+            aria-valuetext={message("readerPercent", progress)}
             max="100"
             value={progress}
           />
           <span className="progress-number">{progress}%</span>
         </div>
         <label className="speed-control">
-          <span className="sr-only">Playback Speed</span>
+          <span className="sr-only">{message("readerPlaybackSpeed")}</span>
           <select
-            aria-label="Playback Speed"
+            aria-label={message("readerPlaybackSpeed")}
             value={snapshot.playbackSpeed}
             onChange={(event) =>
               command(
@@ -386,14 +448,18 @@ export function ReaderApp({
         <button className="voice-button" type="button" onClick={onOpenSettings}>
           <SettingsIcon />
           <span>
-            {snapshot.mode === "cloud" ? "Cloud Voice" : "Chrome Voice"}
+            {message(
+              snapshot.mode === "cloud"
+                ? "readerCloudVoice"
+                : "readerChromeVoice",
+            )}
           </span>
         </button>
         <div className="utility-controls">
           <button
             ref={moreButton}
             aria-expanded={expanded}
-            aria-label="More details"
+            aria-label={message("readerMoreDetails")}
             className="icon-button"
             type="button"
             onClick={() => setExpanded((value) => !value)}
@@ -401,67 +467,81 @@ export function ReaderApp({
             <MoreIcon />
           </button>
           <IconButton
-            label="Minimize controls"
+            label={message("readerMinimize")}
             onClick={() => setMinimized(true)}
           >
             <MinimizeIcon />
           </IconButton>
-          <IconButton label="Close and stop" onClick={() => command("close")}>
+          <IconButton
+            label={message("readerCloseAndStop")}
+            onClick={() => command("close")}
+          >
             <CloseIcon />
           </IconButton>
         </div>
       </div>
       {snapshot.status === "usage-limit" ? (
-        <div className="recovery-row" aria-label="Provider Usage actions">
-          <span>{snapshot.notice}</span>
+        <div
+          className="recovery-row"
+          aria-label={message("readerProviderUsageActions")}
+        >
+          <span>{localizedNotice}</span>
           <button type="button" onClick={() => command("continue-usage")}>
-            Continue this Session
+            {message("readerContinueSession")}
           </button>
           <button type="button" onClick={() => command("switch-to-browser")}>
-            Switch to Chrome Voice
+            {message("readerSwitchChrome")}
           </button>
           <button type="button" onClick={() => command("close")}>
-            Stop
+            {message("readerStop")}
           </button>
         </div>
       ) : null}
       {snapshot.status === "provider-issue" ? (
-        <div className="recovery-row" aria-label="Speech recovery actions">
-          <span>{snapshot.notice}</span>
+        <div
+          className="recovery-row"
+          aria-label={message("readerSpeechRecoveryActions")}
+        >
+          <span>{localizedNotice}</span>
           {snapshot.retryRequiresConfirmation ? (
             <button type="button" onClick={() => command("retry")}>
-              Confirm Retry
+              {message("readerConfirmRetry")}
             </button>
           ) : null}
           <button type="button" onClick={onOpenSettings}>
-            {snapshot.mode === "cloud"
-              ? "Reconnect or change Voice"
-              : "Choose Voice"}
+            {message(
+              snapshot.mode === "cloud"
+                ? "readerReconnectVoice"
+                : "readerChooseVoice",
+            )}
           </button>
           {snapshot.mode === "cloud" ? (
             <button type="button" onClick={() => command("switch-to-browser")}>
-              Switch to Chrome Voice
+              {message("readerSwitchChrome")}
             </button>
           ) : null}
           <button type="button" onClick={() => command("close")}>
-            Stop
+            {message("readerStop")}
           </button>
         </div>
       ) : null}
       {snapshot.status === "page-changed" ? (
-        <div className="recovery-row" aria-label="Source Page recovery actions">
-          <span>{snapshot.notice}</span>
+        <div
+          className="recovery-row"
+          aria-label={message("readerSourceRecoveryActions")}
+        >
+          <span>{localizedNotice}</span>
           <button type="button" onClick={() => command("restart")}>
-            Restart Article
+            {message("readerRestartArticle")}
           </button>
           <button
             type="button"
             onClick={() => command("continue-without-highlights")}
           >
-            Continue without highlights
+            {message("readerContinueWithoutHighlights")}
           </button>
           <button type="button" onClick={() => command("close")}>
-            Stop
+            {message("readerStop")}
           </button>
         </div>
       ) : null}

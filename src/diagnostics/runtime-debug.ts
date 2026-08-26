@@ -1,4 +1,5 @@
-export const DEBUG_MODE = true;
+export const DEBUG_MODE =
+  import.meta.env.DEV || import.meta.env.WXT_DEBUG_MODE === "true";
 export const MAX_RUNTIME_DEBUG_ENTRIES = 160;
 
 export type RuntimeDebugScope = "content" | "background" | "tts" | "offscreen";

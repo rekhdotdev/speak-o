@@ -17,6 +17,24 @@ export type ReadingSessionStatus =
   | "page-changed"
   | "completed";
 
+export type ReadingSessionNotice =
+  | "sessionNoticeRestoredPaused"
+  | "sessionNoticeVoiceRequired"
+  | "sessionNoticeSettingsPaused"
+  | "sessionNoticePreparingNext"
+  | "sessionNoticeUsageGuard"
+  | "sessionNoticeRetryMayDuplicate"
+  | "sessionNoticeCloudAudioFailed"
+  | "sessionNoticeHighlightsEnabled"
+  | "sessionNoticeHighlightsHidden"
+  | "sessionNoticeBufferedSettings"
+  | "sessionNoticeVoiceRequiredContinue"
+  | "sessionNoticeSettingsChangedDuringGeneration"
+  | "sessionNoticeSourceChanged"
+  | "sessionNoticePaused"
+  | "sessionNoticeChromeStopped"
+  | "sessionNoticeChromeFailed";
+
 export interface ReadingSessionSnapshot {
   version: 1;
   id: string;
@@ -43,7 +61,7 @@ export interface ReadingSessionSnapshot {
   expanded: boolean;
   submittedCharacters: number;
   usageGuardCharacters: number | null;
-  notice: string | null;
+  notice: ReadingSessionNotice | null;
   errorCode: string | null;
   retryRequiresConfirmation: boolean;
 }

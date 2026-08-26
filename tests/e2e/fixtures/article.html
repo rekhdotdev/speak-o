@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A deterministic Article</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Georgia, "Times New Roman", serif;
+        background: #f3f0e9;
+        color: #27241f;
+      }
+      body {
+        margin: 0;
+      }
+      nav {
+        padding: 18px 28px;
+        color: #625d54;
+        font:
+          600 13px/1.2 system-ui,
+          sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border-bottom: 1px solid #d9d4ca;
+      }
+      article {
+        width: min(680px, calc(100% - 40px));
+        margin: 56px auto 180px;
+        padding: 46px 52px;
+        background: #fffdf8;
+        border-radius: 18px;
+        box-shadow: 0 24px 70px rgb(53 45 34 / 10%);
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(36px, 6vw, 64px);
+        line-height: 0.98;
+        letter-spacing: -0.035em;
+      }
+      .byline {
+        margin: 0 0 36px;
+        color: #6d655a;
+        font:
+          500 14px/1.4 system-ui,
+          sans-serif;
+      }
+      p,
+      li {
+        font-size: 20px;
+        line-height: 1.65;
+      }
+      h2 {
+        margin-top: 38px;
+        font-size: 28px;
+      }
+    </style>
+  </head>
+  <body>
+    <nav aria-label="Publication">Field Notes · Archive · About</nav>
+    <main>
+      <article>
+        <h1>A calm synthetic Article</h1>
+        <p class="byline" rel="author">By Rowan Example</p>
+        <p>
+          A deterministic fixture gives the Article Reader enough real prose to
+          exercise extraction while keeping private browsing data out of test
+          evidence. Every sentence remains mapped to this visible Source Page.
+        </p>
+        <h2>Stay close to the source</h2>
+        <p>
+          Sentence highlighting should preserve the surrounding publication, and
+          the current word should remain visibly distinct inside that sentence.
+          The floating controls must avoid hiding the prose.
+        </p>
+        <ul>
+          <li>Progress communicates position without looking draggable.</li>
+          <li>Minimized controls remain easy to restore.</li>
+        </ul>
+      </article>
+    </main>
+  </body>
+</html>

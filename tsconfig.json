@@ -21,6 +21,7 @@
     "src/**/*.tsx",
     "tests/**/*.ts",
     "tests/**/*.tsx",
+    "playwright.config.ts",
     "vitest.config.ts",
     "wxt.config.ts"
   ]

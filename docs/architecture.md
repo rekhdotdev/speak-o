@@ -14,7 +14,7 @@ Speak-O is a Chrome 124+ Manifest V3 extension built with WXT, React, and strict
 
 ### Offscreen audio document
 
-`entrypoints/offscreen/` decodes and plays only Cloud Voice audio supplied by the service worker. It reports media-clock progress for alignment. It receives neither Article text nor a Provider Credential and makes no provider request.
+`entrypoints/offscreen/` decodes and plays only Cloud Voice audio supplied by the service worker. It receives the active audio plus the alignment data needed to report media-clock progress; alignment may contain the provider's character sequence for that generated segment. It receives no Article Snapshot or Provider Credential and makes no provider request.
 
 ### Options page
 
@@ -22,7 +22,7 @@ Speak-O is a Chrome 124+ Manifest V3 extension built with WXT, React, and strict
 
 ## Deep module seams
 
-- `src/extraction/`: Selection-first extraction, X Articles Site Adapter, generic Readability candidate discovery, semantic blocks, locale-sensitive sentence segmentation, and exact DOM mappings.
+- `src/extraction/`: Selection-first extraction, X Articles Site Adapter, a generic Readability confidence gate followed by conservative live semantic-root selection, semantic blocks, locale-sensitive sentence segmentation, and exact DOM mappings.
 - `src/session/`: the Reading Session state machine and bounded Session Buffer. UI, provider, audio, storage, and speech work leave the controller as typed effects.
 - `src/provider/`: ElevenLabs metadata validation and reconnectable timestamped WebSocket generation bursts.
 - `src/adapters/`: Chrome `tts` translation into stable Browser Voice events.

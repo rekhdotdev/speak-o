@@ -21,6 +21,8 @@ import {
   summarizeDebugError,
   type RuntimeDebugScope,
 } from "../src/diagnostics/runtime-debug";
+import { applyInterfaceDirection, message } from "../src/i18n";
+import { SourcePageUrlTracker } from "../src/runtime/source-page-url";
 
 const HOST_ID = `speak-o-reader-root-${chrome.runtime.id}`;
 const PAGE_HIGHLIGHT_STYLE_ID = `speak-o-highlight-styles-${chrome.runtime.id}`;
@@ -45,11 +47,13 @@ interface ReaderRuntime {
   article: ArticleSnapshot | null;
   mappings: SourceMapping[];
   highlighter: SourceHighlighter | null;
-  lastUrl: string;
+  sourcePageUrl: SourcePageUrlTracker;
   followSuspended: boolean;
   snapshot: ReadingSessionSnapshot | null;
   debug: RuntimeDebugBuffer;
   lastDebugWordSentence: number;
+  sourceMappingInvalid: boolean;
+  sourceChangeNotification: string | null;
 }
 
 function installPageHighlightStyles(): void {
@@ -87,6 +91,7 @@ function mountRuntime(): ReaderRuntime | null {
   host.style.inset = "0";
   host.style.zIndex = "2147483647";
   host.style.pointerEvents = "none";
+  applyInterfaceDirection(host);
   const shadow = host.attachShadow({ mode: "open" });
   const style = document.createElement("style");
   style.textContent = readerCss;
@@ -102,11 +107,13 @@ function mountRuntime(): ReaderRuntime | null {
     article: null,
     mappings: [],
     highlighter: null,
-    lastUrl: location.href,
+    sourcePageUrl: new SourcePageUrlTracker(location.href),
     followSuspended: false,
     snapshot: null,
     debug: new RuntimeDebugBuffer(),
     lastDebugWordSentence: -1,
+    sourceMappingInvalid: false,
+    sourceChangeNotification: null,
   };
   return runtime;
 }
@@ -150,10 +157,13 @@ export default defineUnlistedScript(() => {
 
     const remove = () => {
       runtime.highlighter?.clear();
+      runtime.sourcePageUrl.synchronize(location.href);
       runtime.snapshot = null;
       runtime.article = null;
       runtime.mappings = [];
       runtime.highlighter = null;
+      runtime.sourceMappingInvalid = false;
+      runtime.sourceChangeNotification = null;
       runtime.host.style.display = "none";
     };
 
@@ -206,7 +216,13 @@ export default defineUnlistedScript(() => {
           }}
           onOpenSettings={() => {
             appendDebug("content", "ui.settings.open", {});
-            void send({ type: "settings.open" });
+            const snapshot = runtime.snapshot;
+            if (!snapshot) return;
+            void send({
+              type: "settings.open",
+              sessionId: snapshot.id,
+              generationEpoch: snapshot.generationEpoch,
+            });
           }}
         />,
       );
@@ -229,24 +245,20 @@ export default defineUnlistedScript(() => {
         { title: string; message: string }
       > = {
         NO_SELECTION_OR_ARTICLE: {
-          title: "No readable Article found",
-          message:
-            "Select the prose you want to hear, then use the Speak-O selection menu.",
+          title: message("extractionNoArticleTitle"),
+          message: message("extractionNoArticleMessage"),
         },
         UNSUPPORTED_X_PAGE: {
-          title: "Select text on this X page",
-          message:
-            "Speak-O reads X Articles automatically; posts, threads, and timelines require a Selection.",
+          title: message("extractionXSelectionTitle"),
+          message: message("extractionXSelectionMessage"),
         },
         MAPPING_INCOMPLETE: {
-          title: "This Article could not be mapped safely",
-          message:
-            "Select the passage you want to hear so highlighting stays exact.",
+          title: message("extractionMappingTitle"),
+          message: message("extractionMappingMessage"),
         },
         ARTICLE_TOO_LARGE: {
-          title: "This Article is unusually large",
-          message:
-            "Select a smaller passage to read it without freezing the Source Page.",
+          title: message("extractionLargeTitle"),
+          message: message("extractionLargeMessage"),
         },
       };
       runtime.state = { kind: "error", ...copy[result.reason] };
@@ -254,6 +266,7 @@ export default defineUnlistedScript(() => {
     };
 
     const extract = () => {
+      runtime.sourcePageUrl.synchronize(location.href);
       if (!runtime.host.isConnected)
         document.documentElement.append(runtime.host);
       installPageHighlightStyles();
@@ -273,8 +286,8 @@ export default defineUnlistedScript(() => {
       } catch (error) {
         runtime.state = {
           kind: "error",
-          title: "Speak-O hit an extraction error",
-          message: "Copy the debug log below and paste it into the issue.",
+          title: message("extractionErrorTitle"),
+          message: message("extractionErrorMessage"),
         };
         appendDebug("content", "extract.error", {
           error: summarizeDebugError(error),
@@ -293,6 +306,8 @@ export default defineUnlistedScript(() => {
         new CssHighlightRegistry(),
         result.mappings,
       );
+      runtime.sourceMappingInvalid = false;
+      runtime.sourceChangeNotification = null;
       appendDebug("content", "extract.complete", {
         extractor: result.snapshot.extractor,
         blockCount: result.snapshot.blocks.length,
@@ -320,6 +335,30 @@ export default defineUnlistedScript(() => {
           ? "auto"
           : "smooth",
       });
+    };
+
+    const signalSourceChange = () => {
+      const snapshot = runtime.snapshot;
+      if (!snapshot || !runtime.sourceMappingInvalid) return;
+      const notification = `${snapshot.id}:${snapshot.generationEpoch}`;
+      if (runtime.sourceChangeNotification === notification) return;
+      runtime.sourceChangeNotification = notification;
+      void send({
+        type: "source.changed",
+        sessionId: snapshot.id,
+        generationEpoch: snapshot.generationEpoch,
+      });
+    };
+
+    const invalidateSourceMappings = () => {
+      if (!runtime.sourceMappingInvalid) {
+        runtime.sourceMappingInvalid = true;
+        runtime.highlighter?.clear();
+        appendDebug("content", "source.mapping-invalidated", {
+          mappingCount: runtime.mappings.length,
+        });
+      }
+      signalSourceChange();
     };
 
     chrome.runtime.onMessage.addListener((message, sender) => {
@@ -418,6 +457,7 @@ export default defineUnlistedScript(() => {
         if (!snapshot.highlightsEnabled) runtime.highlighter?.clear();
         runtime.state = { kind: "session", snapshot };
         render();
+        signalSourceChange();
       } else if (message.type === "content.highlight") {
         const sentenceIndex = message.sentenceIndex;
         if (!Number.isSafeInteger(sentenceIndex) || !runtime.article) return;
@@ -450,10 +490,14 @@ export default defineUnlistedScript(() => {
             endOffset: word.endOffset - sentence.startOffset,
           });
         }
-        runtime.highlighter?.show(sentence.mappingIds, word, {
+        const precision = runtime.highlighter?.show(sentence.mappingIds, word, {
           startOffset: sentence.startOffset,
           endOffset: sentence.endOffset,
         });
+        if (precision === "none") {
+          invalidateSourceMappings();
+          return;
+        }
         maybeFollow(sentence.mappingIds);
       } else if (message.type === "content.clear-highlights") {
         runtime.highlighter?.clear();
@@ -462,15 +506,8 @@ export default defineUnlistedScript(() => {
       }
     });
 
-    const signalSourceChange = () => {
-      if (!runtime.snapshot) return;
-      void send({
-        type: "source.changed",
-        sessionId: runtime.snapshot.id,
-        generationEpoch: runtime.snapshot.generationEpoch,
-      });
-    };
     const signalNavigation = () => {
+      runtime.sourcePageUrl.synchronize(location.href);
       if (!runtime.snapshot) return;
       void send({
         type: "source.navigated",
@@ -496,19 +533,20 @@ export default defineUnlistedScript(() => {
       { passive: true },
     );
 
-    const observer = new MutationObserver(() => {
-      const snapshot = runtime.snapshot;
-      const article = runtime.article;
-      if (!snapshot || !article) return;
-      const sentence = article.sentences[snapshot.currentSentenceIndex];
+    const observer = new MutationObserver((records) => {
+      const hasSourceMutation = records.some(
+        (record) =>
+          record.target !== runtime.host &&
+          !runtime.host.contains(record.target),
+      );
       if (
-        sentence &&
-        sentence.mappingIds.length > 0 &&
+        hasSourceMutation &&
+        !runtime.sourceMappingInvalid &&
+        runtime.article &&
         runtime.highlighter &&
-        !runtime.highlighter.validate(sentence.mappingIds)
+        !runtime.highlighter.validateAll()
       ) {
-        observer.disconnect();
-        signalSourceChange();
+        invalidateSourceMappings();
       }
     });
     observer.observe(document.documentElement, {
@@ -518,8 +556,9 @@ export default defineUnlistedScript(() => {
     });
 
     window.setInterval(() => {
-      if (runtime.snapshot && location.href !== runtime.lastUrl) {
-        runtime.lastUrl = location.href;
+      if (
+        runtime.sourcePageUrl.observe(location.href, runtime.snapshot !== null)
+      ) {
         signalNavigation();
       }
     }, 1_000);

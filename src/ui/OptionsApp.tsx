@@ -1,16 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { buildRedactedDiagnostics } from "../diagnostics/diagnostics";
+import {
+  buildRedactedDiagnostics,
+  type RuntimeDiagnosticEvidence,
+} from "../diagnostics/diagnostics";
 import {
   DEFAULT_PREFERENCES,
   PLAYBACK_SPEEDS,
-  PreferenceStore,
+  PREFERENCES_STORAGE_KEY,
+  isPreferencePatch,
+  sanitizePreferences,
   type ElevenLabsRegion,
+  type PreferencePatch,
   type Preferences,
 } from "../storage/preferences";
 import {
   elevenLabsOriginPattern,
   type ElevenLabsMetadata,
 } from "../provider/elevenlabs";
+import type { CommandContext } from "../session/types";
+import { interfaceDirection, message } from "../i18n";
 
 interface ConnectionState {
   connected: boolean;
@@ -23,11 +31,6 @@ interface ShortcutState {
   description?: string;
   shortcut?: string;
 }
-
-const localPreferences = new PreferenceStore({
-  get: (key) => chrome.storage.local.get(key),
-  set: (items) => chrome.storage.local.set(items),
-});
 
 const emptyConnection: ConnectionState = {
   connected: false,
@@ -107,10 +110,16 @@ export function OptionsApp() {
   const [shortcuts, setShortcuts] = useState<ShortcutState[]>([]);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-
+  const [narrationLanguageDraft, setNarrationLanguageDraft] = useState("");
+  const [usageGuardDraft, setUsageGuardDraft] = useState(
+    String(DEFAULT_PREFERENCES.usageGuardCharacters ?? ""),
+  );
+  const [sessionContext, setSessionContext] = useState<CommandContext | null>(
+    null,
+  );
   useEffect(() => {
     const settingsPort = chrome.runtime.connect({ name: "speech-settings" });
-    void localPreferences.load().then(setPreferences);
+    let disposed = false;
     void chrome.commands.getAll().then((commands) =>
       setShortcuts(
         commands.map((command, index) => ({
@@ -134,21 +143,59 @@ export function OptionsApp() {
         if (typeof response !== "object" || response === null) return;
         const state = response as {
           connection?: ConnectionState;
+          preferences?: Preferences;
           metadata?: ElevenLabsMetadata;
+          sessionContext?: CommandContext | null;
         };
         if (state.connection) setConnection(state.connection);
+        if (state.preferences) setPreferences(state.preferences);
         if (state.metadata) setMetadata(state.metadata);
+        const context = state.sessionContext;
+        if (
+          !disposed &&
+          context &&
+          typeof context.sessionId === "string" &&
+          context.sessionId.length > 0 &&
+          Number.isSafeInteger(context.generationEpoch) &&
+          context.generationEpoch >= 0
+        ) {
+          setSessionContext(context);
+          settingsPort.postMessage({
+            version: 1,
+            target: "background",
+            type: "settings.open",
+            sessionId: context.sessionId,
+            generationEpoch: context.generationEpoch,
+          });
+        }
       });
     const loadBrowserVoices = () => {
       void chrome.tts.getVoices().then(setBrowserVoices);
     };
+    const refreshPreferences = (
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string,
+    ) => {
+      const change = changes[PREFERENCES_STORAGE_KEY];
+      if (areaName === "local" && change) {
+        setPreferences(sanitizePreferences(change.newValue));
+      }
+    };
     loadBrowserVoices();
     chrome.tts.onVoicesChanged.addListener(loadBrowserVoices);
+    chrome.storage.onChanged.addListener(refreshPreferences);
     return () => {
+      disposed = true;
       chrome.tts.onVoicesChanged.removeListener(loadBrowserVoices);
+      chrome.storage.onChanged.removeListener(refreshPreferences);
       settingsPort.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    setNarrationLanguageDraft(preferences.narrationLanguageOverride ?? "");
+    setUsageGuardDraft(String(preferences.usageGuardCharacters ?? ""));
+  }, [preferences.narrationLanguageOverride, preferences.usageGuardCharacters]);
 
   const interfaceLanguage = chrome.i18n.getUILanguage();
   const narrationLanguage =
@@ -172,31 +219,64 @@ export function OptionsApp() {
       .startsWith(baseNarrationLanguage.toLocaleLowerCase());
   });
 
-  const savePreferences = async (next: Preferences) => {
-    setPreferences(next);
-    await localPreferences.save(next);
-    await chrome.runtime.sendMessage({
-      version: 1,
-      target: "background",
-      type: "settings.changed",
-    });
-    setStatus("Preferences saved locally.");
+  const savePreferences = async (patch: PreferencePatch) => {
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        version: 1,
+        target: "background",
+        type: "preferences.patch",
+        patch,
+        ...(sessionContext ?? {}),
+      })) as { ok?: boolean; preferences?: Preferences } | undefined;
+      if (response?.ok && response.preferences) {
+        setPreferences(response.preferences);
+        setStatus(message("optionsPreferencesSaved"));
+        return;
+      }
+    } catch {
+      // The status below keeps a stale/invalidated extension context visible.
+    }
+    setStatus(message("optionsPreferencesSaveFailed"));
+  };
+
+  const commitNarrationLanguage = () => {
+    const value = narrationLanguageDraft.trim() || null;
+    const patch = { narrationLanguageOverride: value };
+    if (!isPreferencePatch(patch)) {
+      setNarrationLanguageDraft(preferences.narrationLanguageOverride ?? "");
+      setStatus(message("optionsInvalidNarrationLanguage"));
+      return;
+    }
+    void savePreferences(patch);
+  };
+
+  const commitUsageGuard = () => {
+    const value = usageGuardDraft.trim();
+    const patch = {
+      usageGuardCharacters: value === "" ? null : Number(value),
+    };
+    if (!isPreferencePatch(patch)) {
+      setUsageGuardDraft(String(preferences.usageGuardCharacters ?? ""));
+      setStatus(message("optionsInvalidUsageGuard"));
+      return;
+    }
+    void savePreferences(patch);
   };
 
   const connect = async () => {
     if (credential.trim().length < 8) {
-      setStatus("Enter a valid ElevenLabs API key.");
+      setStatus(message("optionsInvalidCredential"));
       return;
     }
     setBusy(true);
-    setStatus("Requesting access to the selected API Region…");
+    setStatus(message("optionsRequestingAccess"));
     const originPattern = elevenLabsOriginPattern(preferences.region);
     try {
       const granted = await chrome.permissions.request({
         origins: [originPattern],
       });
       if (!granted) {
-        setStatus("Access was not granted. Speak-O did not save the key.");
+        setStatus(message("optionsAccessDenied"));
         return;
       }
       const response = (await chrome.runtime.sendMessage({
@@ -214,12 +294,12 @@ export function OptionsApp() {
       };
       if (!response.ok) {
         await chrome.permissions.remove({ origins: [originPattern] });
-        setStatus(response.message ?? "ElevenLabs could not be connected.");
+        setStatus(response.message ?? message("optionsConnectionFailed"));
         return;
       }
       setConnection(response.connection ?? emptyConnection);
       setMetadata(response.metadata ?? { voices: [], models: [] });
-      setStatus("ElevenLabs connected.");
+      setStatus(message("optionsConnectionSucceeded"));
     } finally {
       setCredential("");
       setReveal(false);
@@ -238,7 +318,7 @@ export function OptionsApp() {
     if (response.ok) {
       setConnection(emptyConnection);
       setMetadata({ voices: [], models: [] });
-      setStatus("ElevenLabs disconnected and local provider data cleared.");
+      setStatus(message("optionsDisconnected"));
     }
     setBusy(false);
   };
@@ -254,76 +334,73 @@ export function OptionsApp() {
   }, [metadata.voices, voiceSearch]);
 
   const copyDiagnostics = async () => {
+    const response = (await chrome.runtime.sendMessage({
+      version: 1,
+      target: "background",
+      type: "options.get-state",
+    })) as { diagnosticsEvidence?: RuntimeDiagnosticEvidence | null };
+    const evidence = response.diagnosticsEvidence ?? null;
+    if (!evidence) {
+      setStatus(message("optionsNoDiagnostics"));
+      return;
+    }
     const diagnostics = buildRedactedDiagnostics({
       extensionVersion: chrome.runtime.getManifest().version,
-      extractor: "generic",
-      extractionStage: "ready",
-      mappedBlockCount: 0,
-      mappedCharacterCount: 0,
-      mappingCoverage: 0,
-      narrationLanguage: chrome.i18n.getUILanguage(),
-      provider: connection.connected ? "elevenlabs" : "none",
-      modelId: preferences.modelId,
-      errorCodes: [],
+      ...evidence,
       generatedAt: new Date(),
     });
     await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2));
-    setStatus(
-      "Redacted diagnostics copied. No Article text, key, audio, or URL was included.",
-    );
+    setStatus(message("optionsDiagnosticsCopied"));
   };
 
   return (
-    <main className="options-layout">
+    <main className="options-layout" dir={interfaceDirection()}>
       <aside className="options-sidebar">
         <a
           className="product-lockup"
           href="#speech"
-          aria-label="Speak-O settings home"
+          aria-label={message("optionsHomeLabel")}
         >
           <span className="product-mark">S</span>
           <span>
-            <strong>Speak-O</strong>
-            <small>Public beta · 0.1.0</small>
+            <strong>{message("extensionName")}</strong>
+            <small>{message("optionsPublicBetaVersion")}</small>
           </span>
         </a>
-        <nav aria-label="Settings sections">
-          <a href="#speech">Speech</a>
-          <a href="#reading">Reading</a>
-          <a href="#appearance">Appearance</a>
-          <a href="#shortcuts">Shortcuts</a>
-          <a href="#privacy">Privacy & diagnostics</a>
+        <nav aria-label={message("optionsSectionsLabel")}>
+          <a href="#speech">{message("optionsSpeech")}</a>
+          <a href="#reading">{message("optionsReading")}</a>
+          <a href="#appearance">{message("optionsAppearance")}</a>
+          <a href="#shortcuts">{message("optionsShortcuts")}</a>
+          <a href="#privacy">{message("optionsPrivacyDiagnostics")}</a>
         </nav>
-        <p className="publisher">Open-source software published by Rekh.</p>
+        <p className="publisher">{message("optionsPublisher")}</p>
       </aside>
       <div className="options-content">
         <header className="page-heading">
-          <span className="eyebrow">Open-source BYOK Article Reader</span>
-          <h1>Make reading sound like you.</h1>
-          <p>
-            Choose a calm Chrome Voice or connect ElevenLabs directly with your
-            own Provider Credential. Speak-O has no account or subscription.
-          </p>
+          <span className="eyebrow">{message("optionsEyebrow")}</span>
+          <h1>{message("optionsHeading")}</h1>
+          <p>{message("optionsIntroduction")}</p>
         </header>
 
         <Section
           id="speech"
           eyebrow="01"
-          title="Speech"
-          description="Select how Speak-O turns an Article into a controlled spoken experience."
+          title={message("optionsSpeech")}
+          description={message("optionsSpeechDescription")}
         >
           <div className="provider-card">
             <div className="provider-heading">
               <div>
-                <strong>ElevenLabs Cloud Voice</strong>
-                <small>Direct BYOK connection</small>
+                <strong>{message("optionsElevenLabsCloudVoice")}</strong>
+                <small>{message("optionsDirectByok")}</small>
               </div>
               <span
                 className={`connection-badge ${connection.connected ? "connected" : ""}`}
               >
                 {connection.connected
-                  ? `Connected ${connection.maskedSuffix ?? ""}`
-                  : "Not connected"}
+                  ? message("optionsConnected", connection.maskedSuffix ?? "")
+                  : message("optionsNotConnected")}
               </span>
             </div>
             {connection.connected ? (
@@ -333,18 +410,18 @@ export function OptionsApp() {
                 type="button"
                 onClick={disconnect}
               >
-                Disconnect ElevenLabs
+                {message("optionsDisconnectElevenLabs")}
               </button>
             ) : (
               <div className="credential-form">
                 <label>
-                  <span>Provider Credential</span>
+                  <span>{message("optionsProviderCredential")}</span>
                   <div className="credential-input">
                     <input
                       autoComplete="off"
                       type={reveal ? "text" : "password"}
                       value={credential}
-                      placeholder="Paste your ElevenLabs API key"
+                      placeholder={message("optionsCredentialPlaceholder")}
                       onChange={(event) =>
                         setCredential(event.currentTarget.value)
                       }
@@ -353,7 +430,7 @@ export function OptionsApp() {
                       type="button"
                       onClick={() => setReveal((value) => !value)}
                     >
-                      {reveal ? "Hide" : "Reveal"}
+                      {message(reveal ? "optionsHide" : "optionsReveal")}
                     </button>
                   </div>
                 </label>
@@ -366,11 +443,8 @@ export function OptionsApp() {
                     }
                   />
                   <span>
-                    <strong>Remember on this device</strong>
-                    <small>
-                      Chrome profile storage protects a remembered key; Speak-O
-                      does not add application-level encryption.
-                    </small>
+                    <strong>{message("optionsRememberDevice")}</strong>
+                    <small>{message("optionsRememberDescription")}</small>
                   </span>
                 </label>
                 <button
@@ -379,7 +453,9 @@ export function OptionsApp() {
                   type="button"
                   onClick={connect}
                 >
-                  {busy ? "Connecting…" : "Connect ElevenLabs"}
+                  {message(
+                    busy ? "optionsConnecting" : "optionsConnectElevenLabs",
+                  )}
                 </button>
               </div>
             )}
@@ -387,18 +463,18 @@ export function OptionsApp() {
 
           <div className="setting-grid">
             <label className="field">
-              <span>Narration Language</span>
+              <span>{message("optionsNarrationLanguage")}</span>
               <input
                 list="speak-o-narration-languages"
-                value={preferences.narrationLanguageOverride ?? ""}
-                placeholder="Detect from each Article"
+                value={narrationLanguageDraft}
+                placeholder={message("optionsDetectLanguage")}
                 onChange={(event) =>
-                  void savePreferences({
-                    ...preferences,
-                    narrationLanguageOverride:
-                      event.currentTarget.value || null,
-                  })
+                  setNarrationLanguageDraft(event.currentTarget.value)
                 }
+                onBlur={commitNarrationLanguage}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
               />
               <datalist id="speak-o-narration-languages">
                 {availableNarrationLanguages.map((language) => (
@@ -409,23 +485,22 @@ export function OptionsApp() {
               </datalist>
             </label>
             <label className="field">
-              <span>Default Voice Mode</span>
+              <span>{message("optionsDefaultVoiceMode")}</span>
               <select
                 value={preferences.defaultVoiceMode}
                 onChange={(event) =>
                   void savePreferences({
-                    ...preferences,
                     defaultVoiceMode: event.currentTarget
                       .value as Preferences["defaultVoiceMode"],
                   })
                 }
               >
-                <option value="browser">Chrome Voice</option>
-                <option value="cloud">Cloud Voice</option>
+                <option value="browser">{message("optionsChromeVoice")}</option>
+                <option value="cloud">{message("optionsCloudVoice")}</option>
               </select>
             </label>
             <label className="field">
-              <span>Chrome Voice</span>
+              <span>{message("optionsChromeVoice")}</span>
               <select
                 value={
                   preferences.browserVoiceByLanguage[narrationLanguage] ?? ""
@@ -433,7 +508,6 @@ export function OptionsApp() {
                 onChange={(event) => {
                   const voiceName = event.currentTarget.value;
                   void savePreferences({
-                    ...preferences,
                     browserVoiceByLanguage: {
                       ...preferences.browserVoiceByLanguage,
                       [narrationLanguage]: voiceName,
@@ -443,8 +517,7 @@ export function OptionsApp() {
                 }}
               >
                 <option value="">
-                  Automatic · word highlighting when supported ·{" "}
-                  {narrationLanguage}
+                  {message("optionsAutomaticVoice", narrationLanguage)}
                 </option>
                 {compatibleBrowserVoices.map((voice) => (
                   <option
@@ -452,22 +525,23 @@ export function OptionsApp() {
                     value={voice.voiceName}
                   >
                     {voice.voiceName}
-                    {voice.lang ? ` · ${voice.lang}` : ""}
+                    {voice.lang
+                      ? message("optionsVoiceLanguageSuffix", voice.lang)
+                      : ""}
                     {voice.eventTypes?.includes("word")
-                      ? " · word highlighting"
-                      : " · sentence highlighting only"}
-                    {voice.remote ? " · may use a remote service" : ""}
+                      ? message("optionsWordHighlightingSuffix")
+                      : message("optionsSentenceHighlightingSuffix")}
+                    {voice.remote ? message("optionsRemoteVoiceSuffix") : ""}
                   </option>
                 ))}
               </select>
             </label>
             <label className="field">
-              <span>Playback Speed</span>
+              <span>{message("optionsPlaybackSpeed")}</span>
               <select
                 value={preferences.playbackSpeed}
                 onChange={(event) =>
                   void savePreferences({
-                    ...preferences,
                     playbackSpeed: Number(
                       event.currentTarget.value,
                     ) as Preferences["playbackSpeed"],
@@ -482,30 +556,30 @@ export function OptionsApp() {
               </select>
             </label>
             <label className="field">
-              <span>Advanced API Region</span>
+              <span>{message("optionsApiRegion")}</span>
               <select
                 value={preferences.region}
                 onChange={(event) =>
                   void savePreferences({
-                    ...preferences,
                     region: event.currentTarget.value as ElevenLabsRegion,
                   })
                 }
               >
-                <option value="global">Global</option>
-                <option value="us">United States</option>
-                <option value="eu">European Union residency</option>
-                <option value="india">India residency</option>
-                <option value="singapore">Singapore residency</option>
+                <option value="global">{message("optionsRegionGlobal")}</option>
+                <option value="us">{message("optionsRegionUs")}</option>
+                <option value="eu">{message("optionsRegionEu")}</option>
+                <option value="india">{message("optionsRegionIndia")}</option>
+                <option value="singapore">
+                  {message("optionsRegionSingapore")}
+                </option>
               </select>
             </label>
             <label className="field">
-              <span>Model</span>
+              <span>{message("optionsModel")}</span>
               <select
                 value={preferences.modelId}
                 onChange={(event) =>
                   void savePreferences({
-                    ...preferences,
                     modelId: event.currentTarget.value,
                   })
                 }
@@ -526,11 +600,11 @@ export function OptionsApp() {
           {connection.connected ? (
             <div className="voice-picker">
               <label className="field">
-                <span>Search Voices</span>
+                <span>{message("optionsSearchVoices")}</span>
                 <input
                   type="search"
                   value={voiceSearch}
-                  placeholder="Name, accent, or label"
+                  placeholder={message("optionsVoiceSearchPlaceholder")}
                   onChange={(event) =>
                     setVoiceSearch(event.currentTarget.value)
                   }
@@ -539,7 +613,7 @@ export function OptionsApp() {
               <div
                 className="voice-list"
                 role="list"
-                aria-label="Available ElevenLabs Voices"
+                aria-label={message("optionsAvailableVoices")}
               >
                 {visibleVoices.map((voice) => (
                   <div className="voice-option" key={voice.id} role="listitem">
@@ -547,7 +621,6 @@ export function OptionsApp() {
                       type="button"
                       onClick={() =>
                         void savePreferences({
-                          ...preferences,
                           voiceByLanguage: {
                             ...preferences.voiceByLanguage,
                             [narrationLanguage]: voice.id,
@@ -560,7 +633,7 @@ export function OptionsApp() {
                         <strong>{voice.name}</strong>
                         <small>
                           {Object.values(voice.labels).join(" · ") ||
-                            "ElevenLabs Voice"}
+                            message("optionsElevenLabsVoice")}
                         </small>
                       </span>
                       <span>
@@ -568,8 +641,8 @@ export function OptionsApp() {
                           voice.id ||
                         preferences.voiceByLanguage[baseNarrationLanguage] ===
                           voice.id
-                          ? "Selected"
-                          : "Choose"}
+                          ? message("optionsSelected")
+                          : message("optionsChoose")}
                       </span>
                     </button>
                     {voice.previewUrl ? (
@@ -577,15 +650,15 @@ export function OptionsApp() {
                         href={voice.previewUrl}
                         target="_blank"
                         rel="noreferrer"
-                        aria-label={`Preview ${voice.name} using ElevenLabs media`}
+                        aria-label={message(
+                          "optionsPreviewVoiceLabel",
+                          voice.name,
+                        )}
                       >
-                        Preview
+                        {message("optionsPreview")}
                       </a>
                     ) : (
-                      <small>
-                        Preview unavailable; Speak-O will not generate a paid
-                        preview.
-                      </small>
+                      <small>{message("optionsPreviewUnavailable")}</small>
                     )}
                   </div>
                 ))}
@@ -597,48 +670,42 @@ export function OptionsApp() {
         <Section
           id="reading"
           eyebrow="02"
-          title="Reading"
-          description="Keep Reading Position and visual orientation under your control."
+          title={message("optionsReading")}
+          description={message("optionsReadingDescription")}
         >
           <Toggle
             checked={preferences.highlightsEnabled}
-            label="Highlight active text"
-            description="Use exact CSS Highlight ranges on the original Source Page."
+            label={message("optionsHighlightActive")}
+            description={message("optionsHighlightDescription")}
             onChange={(value) =>
-              void savePreferences({ ...preferences, highlightsEnabled: value })
+              void savePreferences({ highlightsEnabled: value })
             }
           />
           <Toggle
             checked={preferences.followEnabled}
-            label="Follow the active sentence"
-            description="Scroll only when the current sentence leaves a comfortable viewport area."
-            onChange={(value) =>
-              void savePreferences({ ...preferences, followEnabled: value })
-            }
+            label={message("optionsFollowSentence")}
+            description={message("optionsFollowDescription")}
+            onChange={(value) => void savePreferences({ followEnabled: value })}
           />
           <label className="setting-row">
             <span>
-              <strong>Provider Usage guard</strong>
-              <small>
-                Pause before submitting more source characters in one Cloud
-                Voice Reading Session.
-              </small>
+              <strong>{message("optionsUsageGuard")}</strong>
+              <small>{message("optionsUsageGuardDescription")}</small>
             </span>
             <input
               className="number-input"
               min="500"
               step="500"
               type="number"
-              value={preferences.usageGuardCharacters ?? ""}
-              placeholder="Disabled"
+              value={usageGuardDraft}
+              placeholder={message("optionsDisabled")}
               onChange={(event) =>
-                void savePreferences({
-                  ...preferences,
-                  usageGuardCharacters: event.currentTarget.value
-                    ? Number(event.currentTarget.value)
-                    : null,
-                })
+                setUsageGuardDraft(event.currentTarget.value)
               }
+              onBlur={commitUsageGuard}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
             />
           </label>
         </Section>
@@ -646,39 +713,37 @@ export function OptionsApp() {
         <Section
           id="appearance"
           eyebrow="03"
-          title="Appearance"
-          description="Use a neutral interface that stays independent from the Source Page."
+          title={message("optionsAppearance")}
+          description={message("optionsAppearanceDescription")}
         >
           <div className="setting-grid">
             <label className="field">
-              <span>Theme</span>
+              <span>{message("optionsTheme")}</span>
               <select
                 value={preferences.theme}
                 onChange={(event) =>
                   void savePreferences({
-                    ...preferences,
                     theme: event.currentTarget.value as Preferences["theme"],
                   })
                 }
               >
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
+                <option value="system">{message("optionsThemeSystem")}</option>
+                <option value="light">{message("optionsThemeLight")}</option>
+                <option value="dark">{message("optionsThemeDark")}</option>
               </select>
             </label>
             <label className="field">
-              <span>Floating bar dock</span>
+              <span>{message("optionsFloatingDock")}</span>
               <select
                 value={preferences.dock}
                 onChange={(event) =>
                   void savePreferences({
-                    ...preferences,
                     dock: event.currentTarget.value as Preferences["dock"],
                   })
                 }
               >
-                <option value="bottom">Bottom center</option>
-                <option value="top">Top center</option>
+                <option value="bottom">{message("optionsDockBottom")}</option>
+                <option value="top">{message("optionsDockTop")}</option>
               </select>
             </label>
           </div>
@@ -687,8 +752,8 @@ export function OptionsApp() {
         <Section
           id="shortcuts"
           eyebrow="04"
-          title="Shortcuts"
-          description="Chrome owns global assignments and reports conflicts or missing keys."
+          title={message("optionsShortcuts")}
+          description={message("optionsShortcutsDescription")}
         >
           <div className="shortcut-list">
             {shortcuts.map((shortcut) => (
@@ -697,7 +762,7 @@ export function OptionsApp() {
                   <strong>{shortcut.description ?? shortcut.name}</strong>
                   <small>{shortcut.name}</small>
                 </span>
-                <kbd>{shortcut.shortcut || "Not assigned"}</kbd>
+                <kbd>{shortcut.shortcut || message("optionsNotAssigned")}</kbd>
               </div>
             ))}
           </div>
@@ -708,37 +773,28 @@ export function OptionsApp() {
               void chrome.tabs.create({ url: "chrome://extensions/shortcuts" })
             }
           >
-            Open Chrome extension shortcuts
+            {message("optionsOpenShortcuts")}
           </button>
         </Section>
 
         <Section
           id="privacy"
           eyebrow="05"
-          title="Privacy & diagnostics"
-          description="Speak-O keeps Rekh outside the Article and Provider Credential data path."
+          title={message("optionsPrivacyDiagnostics")}
+          description={message("optionsPrivacyDescription")}
         >
           <div className="privacy-copy">
             <p>
-              <strong>
-                Rekh receives no Article text, Provider Credentials, Provider
-                Usage, diagnostics, or behavioral data.
-              </strong>
+              <strong>{message("optionsPrivacySummary")}</strong>
             </p>
-            <p>
-              Chrome Voice Mode creates no Speech Provider request from Speak-O.
-              Cloud Voice Mode sends only the submitted source text directly to
-              ElevenLabs using your credential. Preferences stay in local
-              extension storage; active audio uses session storage and is
-              cleared by Chrome when the extension session ends.
-            </p>
+            <p>{message("optionsPrivacyDetail")}</p>
             <p>
               <a
                 href="https://elevenlabs.io/privacy"
                 target="_blank"
                 rel="noreferrer"
               >
-                Read ElevenLabs privacy material
+                {message("optionsElevenLabsPrivacy")}
               </a>
             </p>
           </div>
@@ -747,15 +803,13 @@ export function OptionsApp() {
             type="button"
             onClick={copyDiagnostics}
           >
-            Copy redacted diagnostics
+            {message("optionsCopyDiagnostics")}
           </button>
         </Section>
 
         <footer>
-          <strong>Speak-O 0.1.0 public beta</strong>
-          <span>
-            Apache-2.0 · Published by Rekh · No Speak-O account required
-          </span>
+          <strong>{message("optionsFooterTitle")}</strong>
+          <span>{message("optionsFooterDetail")}</span>
         </footer>
         <div className="status-toast" role="status" aria-live="polite">
           {status}

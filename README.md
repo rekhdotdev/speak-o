@@ -10,7 +10,7 @@ ElevenLabs Cloud Voice Mode connects directly to the user's account with a Bring
 - Selection-first extraction, a dedicated X Articles Site Adapter, and conservative generic Article extraction
 - Exact CSS Custom Highlight ranges without rewriting Source Page DOM
 - Sentence navigation, sentence-based progress, 0.5x–3x Playback Speed, top or bottom docking, and a minimized state
-- ElevenLabs timestamped streaming with a current-plus-two Generation Window, an 8 MiB session-only buffer, and a 25,000-character Provider Usage guard
+- Optional ElevenLabs BYOK Cloud Voice Mode; live-provider acceptance and provider-specific hardening are tracked separately in [GitHub Issue #3](https://github.com/rekhdotdev/speak-o/issues/3)
 - `chrome.tts` Browser Voice fallback
 - Session-only Provider Credentials by default, with explicit local persistence opt-in
 - No Speak-O account, backend, subscription, analytics, telemetry, or remote code
@@ -40,7 +40,7 @@ The normal test suite uses fakes and never needs an ElevenLabs key or consumes P
 
 1. Open an Article and choose the Speak-O toolbar action, press `Alt+Shift+R`, or select prose and use **Read Selection with Speak-O**.
 2. On first use, continue with a Chrome Voice or open settings to connect ElevenLabs.
-3. Use the floating bar to play or pause, move by sentence, seek, change Playback Speed, minimize, or stop.
+3. Use the floating bar to play or pause, move by sentence, view progress, change Playback Speed, minimize, or stop.
 4. Open settings to choose Voices, configure the Provider Usage guard, change the dock or theme, and copy redacted diagnostics.
 
 See [Provider setup](docs/provider-setup.md) and [troubleshooting](docs/troubleshooting.md).

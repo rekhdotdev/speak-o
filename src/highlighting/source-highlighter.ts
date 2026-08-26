@@ -45,6 +45,10 @@ export class SourceHighlighter {
     });
   }
 
+  validateAll(): boolean {
+    return this.validate([...this.mappingsById.keys()]);
+  }
+
   show(
     mappingIds: string[],
     word?: WordOffsets,

@@ -1,7 +1,39 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
+import { DEFAULT_PREFERENCES } from "../../src/storage/preferences";
 import { OptionsApp } from "../../src/ui/OptionsApp";
+
+const settingsPortMock = {
+  disconnect: vi.fn(),
+  postMessage: vi.fn(),
+};
+
+const activeOptionsState = {
+  connection: { connected: false, remembered: false, maskedSuffix: null },
+  preferences: DEFAULT_PREFERENCES,
+  metadata: { voices: [], models: [] },
+  sessionContext: {
+    sessionId: "session-options",
+    generationEpoch: 4,
+  },
+  diagnosticsEvidence: {
+    extractor: "x-articles",
+    extractionStage: "ready",
+    mappedBlockCount: 12,
+    mappedCharacterCount: 4_280,
+    mappingCoverage: 1,
+    narrationLanguage: "en-IN",
+    provider: "browser",
+    modelId: null,
+    errorCodes: [],
+  },
+} as const;
+
+const storageChangedMock = {
+  addListener: vi.fn(),
+  removeListener: vi.fn(),
+};
 
 const chromeMock = {
   storage: {
@@ -9,6 +41,7 @@ const chromeMock = {
       get: vi.fn(async () => ({})),
       set: vi.fn(async () => undefined),
     },
+    onChanged: storageChangedMock,
   },
   commands: {
     getAll: vi.fn(async () => [
@@ -20,11 +53,8 @@ const chromeMock = {
     ]),
   },
   runtime: {
-    connect: vi.fn(() => ({ disconnect: vi.fn() })),
-    sendMessage: vi.fn(async () => ({
-      connection: { connected: false, remembered: false, maskedSuffix: null },
-      metadata: { voices: [], models: [] },
-    })),
+    connect: vi.fn(() => settingsPortMock),
+    sendMessage: vi.fn(),
     getManifest: vi.fn(() => ({ version: "0.1.0" })),
   },
   permissions: {
@@ -39,13 +69,39 @@ const chromeMock = {
       removeListener: vi.fn(),
     },
   },
-  i18n: { getUILanguage: vi.fn(() => "en-US") },
+  i18n: {
+    getUILanguage: vi.fn(() => "en-US"),
+    getMessage: vi.fn((_key: string) => ""),
+  },
 };
 
 describe("options accessibility", () => {
   beforeEach(() => {
     chromeMock.storage.local.set.mockClear();
+    chromeMock.runtime.sendMessage.mockClear();
+    chromeMock.runtime.sendMessage.mockImplementation(
+      async (request: Record<string, unknown>) => {
+        if (request.type === "preferences.patch") {
+          return {
+            ok: true,
+            preferences: {
+              ...DEFAULT_PREFERENCES,
+              ...(request.patch as object),
+            },
+          };
+        }
+        return activeOptionsState;
+      },
+    );
+    chromeMock.i18n.getMessage.mockImplementation((_key: string) => "");
+    settingsPortMock.postMessage.mockClear();
+    storageChangedMock.addListener.mockClear();
+    storageChangedMock.removeListener.mockClear();
     chromeMock.tts.getVoices.mockResolvedValue([]);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn(async () => undefined) },
+    });
   });
 
   it("has landmark, label, and control semantics without automated violations", async () => {
@@ -58,6 +114,21 @@ describe("options accessibility", () => {
     ).toBeVisible();
     expect((await axe.run(view.container)).violations).toEqual([]);
   }, 10_000);
+
+  it("uses localized accessibility names and bidi direction", async () => {
+    chromeMock.i18n.getMessage.mockImplementation((key) => {
+      if (key === "@@bidi_dir") return "rtl";
+      if (key === "optionsHomeLabel") return "Localized settings home";
+      return "";
+    });
+    vi.stubGlobal("chrome", chromeMock);
+    render(<OptionsApp />);
+
+    expect(
+      await screen.findByRole("link", { name: "Localized settings home" }),
+    ).toBeVisible();
+    expect(screen.getByRole("main")).toHaveAttribute("dir", "rtl");
+  });
 
   it("saves a selected Chrome Voice for both the exact and base language", async () => {
     chromeMock.tts.getVoices.mockResolvedValue([
@@ -77,21 +148,129 @@ describe("options accessibility", () => {
     );
 
     await waitFor(() =>
-      expect(chromeMock.storage.local.set).toHaveBeenCalledWith({
-        preferences: expect.objectContaining({
+      expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith({
+        version: 1,
+        target: "background",
+        type: "preferences.patch",
+        patch: {
           browserVoiceByLanguage: {
             "en-US": "Word Voice",
             en: "Word Voice",
           },
-        }),
+        },
+        sessionId: "session-options",
+        generationEpoch: 4,
       }),
     );
+    expect(settingsPortMock.postMessage).toHaveBeenCalledWith({
+      version: 1,
+      target: "background",
+      type: "settings.open",
+      sessionId: "session-options",
+      generationEpoch: 4,
+    });
+  });
+
+  it("commits typed language and usage values only after editing finishes", async () => {
+    vi.stubGlobal("chrome", chromeMock);
+    const user = userEvent.setup();
+    render(<OptionsApp />);
+
+    const language = await screen.findByRole("combobox", {
+      name: "Narration Language",
+    });
+    chromeMock.runtime.sendMessage.mockClear();
+    await user.type(language, "fr-FR");
+    expect(chromeMock.runtime.sendMessage).not.toHaveBeenCalled();
+    await user.tab();
     await waitFor(() =>
-      expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith({
-        version: 1,
-        target: "background",
-        type: "settings.changed",
-      }),
+      expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "preferences.patch",
+          patch: { narrationLanguageOverride: "fr-FR" },
+        }),
+      ),
     );
+
+    const usageGuard = screen.getByRole("spinbutton", {
+      name: /Provider Usage guard/,
+    });
+    chromeMock.runtime.sendMessage.mockClear();
+    await user.clear(usageGuard);
+    await user.type(usageGuard, "30000");
+    expect(chromeMock.runtime.sendMessage).not.toHaveBeenCalled();
+    await user.tab();
+    await waitFor(() =>
+      expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "preferences.patch",
+          patch: { usageGuardCharacters: 30_000 },
+        }),
+      ),
+    );
+  });
+
+  it("shows a save error when the background rejects a preference patch", async () => {
+    chromeMock.runtime.sendMessage.mockImplementation(
+      async (request: Record<string, unknown>) =>
+        request.type === "preferences.patch" ? undefined : activeOptionsState,
+    );
+    vi.stubGlobal("chrome", chromeMock);
+    const user = userEvent.setup();
+    render(<OptionsApp />);
+
+    await user.selectOptions(
+      await screen.findByRole("combobox", { name: "Theme" }),
+      "dark",
+    );
+
+    expect(
+      await screen.findByText("Preferences could not be saved. Try again."),
+    ).toBeVisible();
+  });
+
+  it("copies diagnostics from the active runtime evidence", async () => {
+    vi.stubGlobal("chrome", chromeMock);
+    render(<OptionsApp />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Copy redacted diagnostics" }),
+    );
+
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalled(),
+    );
+    const copied = vi.mocked(navigator.clipboard.writeText).mock.calls[0]?.[0];
+    expect(JSON.parse(String(copied))).toMatchObject({
+      extractor: "x-articles",
+      mappedBlockCount: 12,
+      mappedCharacterCount: 4_280,
+      narrationLanguage: "en-IN",
+      provider: "browser",
+      modelId: null,
+    });
+  });
+
+  it("does not fabricate diagnostics without an active session", async () => {
+    chromeMock.runtime.sendMessage
+      .mockResolvedValueOnce(activeOptionsState as never)
+      .mockResolvedValueOnce({
+        ...activeOptionsState,
+        sessionContext: null,
+        diagnosticsEvidence: null,
+      } as never);
+    vi.stubGlobal("chrome", chromeMock);
+    render(<OptionsApp />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Copy redacted diagnostics" }),
+    );
+
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        "No active Reading Session is available for diagnostics.",
+      ),
+    ).toBeVisible();
   });
 });

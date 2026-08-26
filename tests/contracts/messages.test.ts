@@ -65,9 +65,54 @@ describe("runtime message contract", () => {
       isExtensionMessage({
         version: 1,
         target: "background",
-        type: "settings.changed",
+        type: "preferences.patch",
+        patch: { theme: "dark" },
+        sessionId: "session-settings",
+        generationEpoch: 7,
       }),
     ).toBe(true);
+    expect(
+      isExtensionMessage({
+        version: 1,
+        target: "background",
+        type: "preferences.patch",
+        patch: { playbackSpeed: 99 },
+      }),
+    ).toBe(false);
+    expect(
+      isExtensionMessage({
+        version: 1,
+        target: "background",
+        type: "preferences.patch",
+        patch: { theme: "dark" },
+        sessionId: "partial-context",
+      }),
+    ).toBe(false);
+    expect(
+      isExtensionMessage({
+        version: 1,
+        target: "background",
+        type: "settings.changed",
+      }),
+    ).toBe(false);
+    expect(
+      isExtensionMessage({
+        version: 1,
+        target: "background",
+        type: "settings.changed",
+        sessionId: "session-settings",
+        generationEpoch: 7,
+      }),
+    ).toBe(true);
+    expect(
+      isExtensionMessage({
+        version: 1,
+        target: "background",
+        type: "settings.open",
+        sessionId: "session-settings",
+        generationEpoch: -1,
+      }),
+    ).toBe(false);
     expect(
       isExtensionMessage({
         version: 1,

@@ -39,11 +39,11 @@ function snapshot(status: ReadingSessionStatus): ReadingSessionSnapshot {
     usageGuardCharacters: 25_000,
     notice:
       status === "page-changed"
-        ? "The Source Page changed."
+        ? "sessionNoticeSourceChanged"
         : status === "provider-issue"
-          ? "The Speech Provider needs attention."
+          ? "sessionNoticeRetryMayDuplicate"
           : status === "usage-limit"
-            ? "Provider Usage guard reached."
+            ? "sessionNoticeUsageGuard"
             : null,
     errorCode: status === "provider-issue" ? "PROVIDER_UNAVAILABLE" : null,
     retryRequiresConfirmation: status === "provider-issue",
@@ -64,6 +64,31 @@ async function expectNoViolations(state: ReaderViewState): Promise<void> {
 }
 
 describe("floating Reader accessibility", () => {
+  it("uses localized accessibility names and bidi direction", () => {
+    vi.stubGlobal("chrome", {
+      i18n: {
+        getMessage: vi.fn((key: string) => {
+          if (key === "@@bidi_dir") return "rtl";
+          if (key === "readerLabel") return "Localized Article Reader";
+          return "";
+        }),
+      },
+    });
+    render(
+      <ReaderApp
+        state={{ kind: "finding" }}
+        onChooseMode={vi.fn()}
+        onCommand={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Localized Article Reader")).toHaveAttribute(
+      "dir",
+      "rtl",
+    );
+  });
+
   it("has no automated violations in its important visible states", async () => {
     await expectNoViolations({ kind: "finding" });
     await expectNoViolations({
@@ -108,7 +133,33 @@ describe("floating Reader accessibility", () => {
     expect(screen.getByRole("button", { name: "Pause" })).toHaveFocus();
     expect(screen.getByLabelText("25 percent read")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Maximize controls" }));
-    expect(screen.getByRole("button", { name: "Pause" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Pause" })).toHaveFocus();
+  });
+
+  it("localizes typed runtime notices at the presentation boundary", () => {
+    vi.stubGlobal("chrome", {
+      i18n: {
+        getMessage: vi.fn((key: string) =>
+          key === "sessionNoticePaused" ? "Localized pause notice" : "",
+        ),
+      },
+    });
+    render(
+      <ReaderApp
+        state={{
+          kind: "session",
+          snapshot: {
+            ...snapshot("paused"),
+            notice: "sessionNoticePaused",
+          },
+        }}
+        onChooseMode={vi.fn()}
+        onCommand={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Localized pause notice")).toBeVisible();
   });
 
   it("does not double-handle native button keys or intercept editable controls", async () => {
@@ -134,6 +185,42 @@ describe("floating Reader accessibility", () => {
     speed.focus();
     await user.keyboard(" ");
     expect(onCommand).not.toHaveBeenCalled();
+  });
+
+  it("offers sentence, speed, and transport shortcuts from the focused Reader surface", async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    render(
+      <ReaderApp
+        state={{ kind: "session", snapshot: snapshot("paused") }}
+        onChooseMode={vi.fn()}
+        onCommand={onCommand}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    const reader = screen.getByLabelText("Speak-O Article Reader");
+    reader.focus();
+    expect(reader).toHaveFocus();
+
+    await user.keyboard("[ArrowLeft][ArrowRight][ArrowUp][ArrowDown] ");
+    expect(onCommand.mock.calls).toEqual([
+      ["previous", undefined],
+      ["next", undefined],
+      ["set-playback-speed", 1.25],
+      ["set-playback-speed", 0.75],
+      ["toggle", undefined],
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "More details" }));
+    expect(screen.getByText("Now reading")).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByText("Now reading")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More details" })).toHaveFocus();
+
+    onCommand.mockClear();
+    await user.keyboard("[ArrowLeft]");
+    expect(onCommand).toHaveBeenCalledWith("previous", undefined);
   });
 
   it("opens the details row above the main controls", async () => {

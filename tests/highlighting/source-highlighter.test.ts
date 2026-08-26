@@ -80,4 +80,44 @@ describe("SourceHighlighter", () => {
       "Second sentence.",
     );
   });
+
+  it("invalidates the Article Snapshot when a future mapped sentence changes", () => {
+    document.body.innerHTML = `<article>
+      <p id="current">Current sentence.</p>
+      <p id="future">Future sentence.</p>
+    </article>`;
+    const currentText = document.querySelector("#current")?.firstChild;
+    const futureText = document.querySelector("#future")?.firstChild;
+    if (!(currentText instanceof Text) || !(futureText instanceof Text)) {
+      throw new Error("Fixture text is missing");
+    }
+    const currentRange = document.createRange();
+    currentRange.selectNodeContents(currentText);
+    const futureRange = document.createRange();
+    futureRange.selectNodeContents(futureText);
+    const registry = new MemoryHighlightRegistry();
+    const highlighter = new SourceHighlighter(registry, [
+      {
+        id: "current",
+        blockIndex: 0,
+        range: currentRange,
+        sourceText: "Current sentence.",
+        utteranceStart: 0,
+        utteranceEnd: 17,
+      },
+      {
+        id: "future",
+        blockIndex: 1,
+        range: futureRange,
+        sourceText: "Future sentence.",
+        utteranceStart: 18,
+        utteranceEnd: 34,
+      },
+    ]);
+
+    expect(highlighter.validateAll()).toBe(true);
+    futureText.data = "Changed future sentence.";
+    expect(highlighter.validate(["current"])).toBe(true);
+    expect(highlighter.validateAll()).toBe(false);
+  });
 });

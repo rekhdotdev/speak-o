@@ -189,8 +189,9 @@ select {
 .voice-button:active {
   scale: 0.96;
 }
+.reader-shell:focus-visible,
 .icon-button:focus-visible,
-.compact-play:focus-visible,
+.compact-play:focus,
 button:focus-visible,
 select:focus-visible,
 input:focus-visible {

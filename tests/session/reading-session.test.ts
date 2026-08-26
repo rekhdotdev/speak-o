@@ -397,8 +397,7 @@ describe("Reading Session interface", () => {
     });
     expect(cancelled.snapshot).toMatchObject({
       status: "paused",
-      notice:
-        "Chrome Voice stopped unexpectedly. Press play to restart the sentence.",
+      notice: "sessionNoticeChromeStopped",
       errorCode: "BROWSER_TTS_CANCELLED",
     });
   });
@@ -588,7 +587,7 @@ describe("Reading Session interface", () => {
       sourceFrameId: 3,
       currentSentenceIndex: 1,
       status: "paused",
-      notice: "Paused after Chrome restored the Reading Session.",
+      notice: "sessionNoticeRestoredPaused",
     });
     expect(restored.effects.map((effect) => effect.type)).toEqual([
       "browser.stop",

@@ -5,6 +5,7 @@ import type {
   CommandContext,
   ReadingSessionCommand,
   ReadingSessionEffect,
+  ReadingSessionNotice,
   ReadingSessionSnapshot,
   ReadingSessionTransition,
   SpeechAlignment,
@@ -47,7 +48,7 @@ interface ActiveSession {
 }
 
 const SETTINGS_PAUSED_NOTICE =
-  "Speech settings open; Cloud Voice preparation is paused.";
+  "sessionNoticeSettingsPaused" satisfies ReadingSessionNotice;
 
 function articleForPreferences(
   article: ArticleSnapshot,
@@ -248,7 +249,7 @@ export class ReadingSessionController {
       expanded: false,
       submittedCharacters: 0,
       usageGuardCharacters: preferences.usageGuardCharacters,
-      notice: "Paused after Chrome restored the Reading Session.",
+      notice: "sessionNoticeRestoredPaused",
       errorCode: null,
       retryRequiresConfirmation: false,
     };
@@ -446,7 +447,7 @@ export class ReadingSessionController {
       active.snapshot = {
         ...active.snapshot,
         status: "provider-issue",
-        notice: "Choose a compatible Voice before using Cloud Voice Mode.",
+        notice: "sessionNoticeVoiceRequired",
         errorCode: "VOICE_REQUIRED",
       };
       return this.transition([this.renderEffect(active.snapshot)]);
@@ -502,7 +503,7 @@ export class ReadingSessionController {
       active.snapshot = {
         ...active.snapshot,
         status: "buffering",
-        notice: "Preparing next sentence",
+        notice: "sessionNoticePreparingNext",
       };
       return this.transition([this.renderEffect(active.snapshot)]);
     }
@@ -523,7 +524,7 @@ export class ReadingSessionController {
       active.snapshot = {
         ...active.snapshot,
         status: "usage-limit",
-        notice: "Provider Usage guard reached",
+        notice: "sessionNoticeUsageGuard",
       };
       return this.transition([this.renderEffect(active.snapshot)]);
     }
@@ -541,7 +542,7 @@ export class ReadingSessionController {
       status: "preparing",
       submittedCharacters:
         active.snapshot.submittedCharacters + submittedCharacters,
-      notice: "Preparing next sentence",
+      notice: "sessionNoticePreparingNext",
       errorCode: null,
     };
     active.canResumeMedia = false;
@@ -581,7 +582,7 @@ export class ReadingSessionController {
         active.snapshot = {
           ...active.snapshot,
           status: "preparing",
-          notice: "Preparing next sentence",
+          notice: "sessionNoticePreparingNext",
           errorCode: null,
           retryRequiresConfirmation: false,
         };
@@ -597,8 +598,7 @@ export class ReadingSessionController {
       active.snapshot = {
         ...active.snapshot,
         status: "provider-issue",
-        notice:
-          "Retry may duplicate Provider Usage. Confirm Retry, switch to Chrome, or stop.",
+        notice: "sessionNoticeRetryMayDuplicate",
         errorCode: event.errorCode,
         retryRequiresConfirmation: true,
       };
@@ -706,7 +706,7 @@ export class ReadingSessionController {
       active.snapshot = {
         ...active.snapshot,
         status: "provider-issue",
-        notice: "Cloud Voice audio could not continue.",
+        notice: "sessionNoticeCloudAudioFailed",
         errorCode: event.errorCode,
       };
       return this.transition([this.renderEffect(active.snapshot)]);
@@ -783,7 +783,7 @@ export class ReadingSessionController {
     active.snapshot = {
       ...active.snapshot,
       status: "preparing",
-      notice: "Preparing next sentence",
+      notice: "sessionNoticePreparingNext",
       errorCode: null,
       retryRequiresConfirmation: false,
     };
@@ -818,7 +818,7 @@ export class ReadingSessionController {
     active.snapshot = {
       ...active.snapshot,
       status: "paused",
-      notice: "Paused",
+      notice: "sessionNoticePaused",
     };
     const pauseEffect =
       active.snapshot.mode === "browser"
@@ -981,8 +981,8 @@ export class ReadingSessionController {
       ...active.snapshot,
       highlightsEnabled: enabled,
       notice: enabled
-        ? "Source Page highlighting enabled."
-        : "Source Page highlighting hidden.",
+        ? "sessionNoticeHighlightsEnabled"
+        : "sessionNoticeHighlightsHidden",
     };
     const highlightEffect: ReadingSessionEffect = enabled
       ? this.contextEffect(active.snapshot, {
@@ -1002,6 +1002,7 @@ export class ReadingSessionController {
 
   private settingsOpened(): ReadingSessionTransition {
     const active = this.requireActive();
+    if (active.speechSettingsOpen) return this.transition([]);
     active.speechSettingsOpen = true;
     active.settingsConfigurationAtOpen = {
       narrationLanguage: active.snapshot.narrationLanguage,
@@ -1059,7 +1060,7 @@ export class ReadingSessionController {
       voiceId,
       notice:
         active.snapshot.mode === "cloud" && active.bufferedAudio.size > 0
-          ? "Buffered audio keeps its earlier Voice and Model."
+          ? "sessionNoticeBufferedSettings"
           : active.snapshot.notice === SETTINGS_PAUSED_NOTICE
             ? null
             : active.snapshot.notice,
@@ -1118,7 +1119,7 @@ export class ReadingSessionController {
           active.snapshot = {
             ...active.snapshot,
             status: "provider-issue",
-            notice: "Choose a compatible Voice before continuing Cloud Voice.",
+            notice: "sessionNoticeVoiceRequiredContinue",
             errorCode: "VOICE_REQUIRED",
             retryRequiresConfirmation: false,
           };
@@ -1149,8 +1150,7 @@ export class ReadingSessionController {
         active.snapshot = {
           ...active.snapshot,
           status: "provider-issue",
-          notice:
-            "Speech settings changed while Cloud Voice was preparing. Confirm Retry because Provider Usage may already have occurred.",
+          notice: "sessionNoticeSettingsChangedDuringGeneration",
           errorCode: "SETTINGS_CHANGED_DURING_GENERATION",
           retryRequiresConfirmation: true,
         };
@@ -1182,8 +1182,7 @@ export class ReadingSessionController {
     active.snapshot = {
       ...active.snapshot,
       status: "page-changed",
-      notice:
-        "The Source Page changed. Restart, continue without highlighting, or stop.",
+      notice: "sessionNoticeSourceChanged",
     };
     return this.transition([
       this.contextEffect(active.snapshot, { type: "browser.stop" }),
@@ -1278,7 +1277,7 @@ export class ReadingSessionController {
       active.snapshot = {
         ...active.snapshot,
         status: "paused",
-        notice: "Paused",
+        notice: "sessionNoticePaused",
       };
       return this.transition([
         this.renderEffect(active.snapshot),
@@ -1307,8 +1306,7 @@ export class ReadingSessionController {
       active.snapshot = {
         ...active.snapshot,
         status: "paused",
-        notice:
-          "Chrome Voice stopped unexpectedly. Press play to restart the sentence.",
+        notice: "sessionNoticeChromeStopped",
         errorCode:
           event.type === "cancelled"
             ? "BROWSER_TTS_CANCELLED"
@@ -1338,7 +1336,7 @@ export class ReadingSessionController {
         ...active.snapshot,
         status: "provider-issue",
         errorCode: event.errorCode,
-        notice: "Chrome Voice could not continue.",
+        notice: "sessionNoticeChromeFailed",
       };
       return this.transition([this.renderEffect(active.snapshot)]);
     }

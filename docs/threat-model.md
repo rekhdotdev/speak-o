@@ -10,7 +10,7 @@
 
 ## Trust boundaries
 
-The service worker is the only component with credential and provider authority. The injected reader is exposed to hostile Source Pages but holds only the fixed Article Snapshot, live ranges, and rendered session state. The offscreen document receives generated audio and timing context only. Rekh operates no runtime backend.
+The service worker is the only component with credential and provider authority. The injected reader is exposed to hostile Source Pages but holds only the fixed Article Snapshot, live ranges, and rendered session state. The offscreen document receives generated audio and the active segment's alignment payload needed to report media timing; it receives neither the full Article Snapshot nor a Provider Credential. Rekh operates no runtime backend.
 
 ## Principal threats and controls
 

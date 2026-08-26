@@ -6,13 +6,13 @@ Speak-O — BYOK Article Reader
 
 ## Short description
 
-Listen to Articles on the original page with calm controls, exact highlights, Chrome Voices, or your own ElevenLabs key.
+Listen to Articles on the original page with calm controls, exact highlights, and Chrome Voices.
 
 ## Detailed description
 
 Speak-O is an open-source, accountless Article Reader for Chrome. Start it explicitly from the toolbar, a keyboard command, or selected prose. It captures a fixed Article Snapshot, skips surrounding page chrome, and keeps the active sentence highlighted on the original Source Page without rewriting the page.
 
-Use a Chrome Voice with no setup, or connect ElevenLabs directly with your own Provider Credential. Cloud Voice generation is bounded to the current and at most two upcoming sentences, buffered only for the active Reading Session, and protected by a configurable Provider Usage guard.
+Use a Chrome Voice with no setup. Speak-O also includes an optional ElevenLabs BYOK Cloud Voice Mode, whose live-provider acceptance and provider-specific hardening are tracked separately before Store publication.
 
 The compact floating bar provides previous, play or pause, next, sentence-based progress, Playback Speed, Voice settings, details, minimize, and stop. Choose top or bottom docking, light or dark presentation, highlighting, and follow behavior.
 

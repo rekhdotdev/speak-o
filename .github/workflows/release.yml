@@ -18,6 +18,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:run
+      - name: Upload release browser evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: speak-o-release-e2e-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/e2e/
+          if-no-files-found: warn
+          retention-days: 30
       - name: Verify tag matches package version
         run: test "${GITHUB_REF_NAME}" = "v$(node -p \"require('./package.json').version\")"
       - uses: softprops/action-gh-release@v2

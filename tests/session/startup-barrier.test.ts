@@ -1,6 +1,7 @@
 import {
   rebaseSessionCommandAfterRecovery,
   StartupBarrier,
+  togglePlaybackAfterRecovery,
 } from "../../src/session/startup-barrier";
 
 describe("Reading Session startup barrier", () => {
@@ -55,5 +56,52 @@ describe("Reading Session startup barrier", () => {
       ...staleCommand,
       generationEpoch: 4,
     });
+  });
+
+  it("toggles the recovered current session when the global command wakes the worker", async () => {
+    let finishRecovery: (() => void) | undefined;
+    const recovery = new Promise<void>((resolve) => {
+      finishRecovery = resolve;
+    });
+    const barrier = new StartupBarrier(recovery);
+    let currentSnapshot: {
+      id: string;
+      generationEpoch: number;
+      status: "paused";
+    } | null = null;
+    const execute = vi.fn(async () => undefined);
+
+    const toggle = togglePlaybackAfterRecovery(
+      barrier,
+      () => currentSnapshot,
+      execute,
+    );
+
+    await Promise.resolve();
+    expect(execute).not.toHaveBeenCalled();
+
+    currentSnapshot = {
+      id: "session-recovered",
+      generationEpoch: 8,
+      status: "paused",
+    };
+    finishRecovery?.();
+
+    await expect(toggle).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledWith({
+      type: "play",
+      sessionId: "session-recovered",
+      generationEpoch: 8,
+    });
+  });
+
+  it("does nothing when recovery settles without an active session", async () => {
+    const barrier = new StartupBarrier(Promise.resolve());
+    const execute = vi.fn(async () => undefined);
+
+    await expect(
+      togglePlaybackAfterRecovery(barrier, () => null, execute),
+    ).resolves.toBe(false);
+    expect(execute).not.toHaveBeenCalled();
   });
 });
