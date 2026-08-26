@@ -243,6 +243,89 @@ describe("Reading Session interface", () => {
     );
   });
 
+  it("stops Chrome before resuming a sentence reached by automatic advance", () => {
+    const controller = new ReadingSessionController(
+      () => "session-advanced-resume",
+    );
+    controller.dispatch({
+      type: "activate",
+      article: article("article-advanced-resume", ["One.", "Two."]),
+      sourceTabId: 9,
+      sourceFrameId: 0,
+      mode: "browser",
+      preferences: DEFAULT_PREFERENCES,
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "session-advanced-resume",
+      generationEpoch: 1,
+    });
+    controller.dispatch({
+      type: "browser.event",
+      sessionId: "session-advanced-resume",
+      generationEpoch: 1,
+      event: { type: "end", sentenceIndex: 0 },
+    });
+    controller.dispatch({
+      type: "pause",
+      sessionId: "session-advanced-resume",
+      generationEpoch: 1,
+    });
+
+    const resumed = controller.dispatch({
+      type: "play",
+      sessionId: "session-advanced-resume",
+      generationEpoch: 1,
+    });
+
+    expect(resumed.snapshot).toMatchObject({
+      status: "playing",
+      currentSentenceIndex: 1,
+    });
+    expect(resumed.effects.map((effect) => effect.type)).toEqual([
+      "browser.stop",
+      "browser.speak",
+      "content.render",
+      "storage.save-descriptor",
+    ]);
+  });
+
+  it("keeps a paused session paused when Chrome reports a delayed start", () => {
+    const controller = new ReadingSessionController(
+      () => "session-delayed-start",
+    );
+    controller.dispatch({
+      type: "activate",
+      article: article("article-delayed-start", ["One."]),
+      sourceTabId: 9,
+      sourceFrameId: 0,
+      mode: "browser",
+      preferences: DEFAULT_PREFERENCES,
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "session-delayed-start",
+      generationEpoch: 1,
+    });
+    controller.dispatch({
+      type: "pause",
+      sessionId: "session-delayed-start",
+      generationEpoch: 1,
+    });
+
+    const delayedStart = controller.dispatch({
+      type: "browser.event",
+      sessionId: "session-delayed-start",
+      generationEpoch: 1,
+      event: { type: "start", sentenceIndex: 0 },
+    });
+
+    expect(delayedStart.snapshot?.status).toBe("paused");
+    expect(delayedStart.effects.map((effect) => effect.type)).toEqual([
+      "browser.pause",
+    ]);
+  });
+
   it("restarts a playing Browser Voice sentence when settings select a new voice", () => {
     const controller = new ReadingSessionController(() => "session-voice");
     controller.dispatch({

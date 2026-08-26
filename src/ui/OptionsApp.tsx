@@ -443,7 +443,8 @@ export function OptionsApp() {
                 }}
               >
                 <option value="">
-                  Automatic · prefer word highlighting · {narrationLanguage}
+                  Automatic · word highlighting when supported ·{" "}
+                  {narrationLanguage}
                 </option>
                 {compatibleBrowserVoices.map((voice) => (
                   <option

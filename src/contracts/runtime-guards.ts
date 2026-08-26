@@ -221,6 +221,8 @@ export function isExtensionMessage(
       "content.highlight",
       "content.clear-highlights",
       "content.clear",
+      "content.debug",
+      "content.debug.snapshot",
       "session.reconcile.request",
     ],
     offscreen: [

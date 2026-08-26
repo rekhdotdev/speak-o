@@ -68,6 +68,13 @@ describe("runtime message contract", () => {
         type: "settings.changed",
       }),
     ).toBe(true);
+    expect(
+      isExtensionMessage({
+        version: 1,
+        target: "content",
+        type: "content.debug.snapshot",
+      }),
+    ).toBe(true);
   });
 
   it("validates recovered descriptors and bounded session audio", () => {

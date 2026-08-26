@@ -15,6 +15,12 @@ import { isExtensionMessage, isRecord } from "../src/contracts/runtime-guards";
 import type { ReadingSessionSnapshot } from "../src/session/types";
 import type { VoiceMode } from "../src/storage/preferences";
 import { sendRuntimeMessageSafely } from "../src/runtime/safe-runtime-message";
+import {
+  RuntimeDebugBuffer,
+  isRuntimeDebugEntry,
+  summarizeDebugError,
+  type RuntimeDebugScope,
+} from "../src/diagnostics/runtime-debug";
 
 const HOST_ID = `speak-o-reader-root-${chrome.runtime.id}`;
 const PAGE_HIGHLIGHT_STYLE_ID = `speak-o-highlight-styles-${chrome.runtime.id}`;
@@ -42,6 +48,8 @@ interface ReaderRuntime {
   lastUrl: string;
   followSuspended: boolean;
   snapshot: ReadingSessionSnapshot | null;
+  debug: RuntimeDebugBuffer;
+  lastDebugWordSentence: number;
 }
 
 function installPageHighlightStyles(): void {
@@ -97,6 +105,8 @@ function mountRuntime(): ReaderRuntime | null {
     lastUrl: location.href,
     followSuspended: false,
     snapshot: null,
+    debug: new RuntimeDebugBuffer(),
+    lastDebugWordSentence: -1,
   };
   return runtime;
 }
@@ -105,15 +115,38 @@ export default defineUnlistedScript(() => {
   const runtime = mountRuntime();
 
   if (runtime) {
-    const send = (message: Record<string, unknown>) =>
-      sendRuntimeMessageSafely(
-        (runtimeMessage) => chrome.runtime.sendMessage(runtimeMessage),
-        {
-          version: 1,
-          target: "background",
-          ...message,
-        },
-      );
+    const send = async (message: Record<string, unknown>) => {
+      const messageType = String(message.type ?? "unknown");
+      let invalidated = false;
+      appendDebug("content", "message.send", { messageType });
+      try {
+        const result = await sendRuntimeMessageSafely(
+          (runtimeMessage) => chrome.runtime.sendMessage(runtimeMessage),
+          {
+            version: 1,
+            target: "background",
+            ...message,
+          },
+          (error) => {
+            invalidated = true;
+            appendDebug("content", "message.context-invalidated", {
+              messageType,
+              error: summarizeDebugError(error),
+            });
+          },
+        );
+        if (!invalidated) {
+          appendDebug("content", "message.send.settled", { messageType });
+        }
+        return result;
+      } catch (error) {
+        appendDebug("content", "message.send.error", {
+          messageType,
+          error: summarizeDebugError(error),
+        });
+        return undefined;
+      }
+    };
 
     const remove = () => {
       runtime.highlighter?.clear();
@@ -128,8 +161,10 @@ export default defineUnlistedScript(() => {
       runtime.root.render(
         <ReaderApp
           state={runtime.state}
+          debugLog={runtime.debug.format()}
           onChooseMode={(mode: VoiceMode) => {
             if (!runtime.article) return;
+            appendDebug("content", "ui.mode.choose", { mode });
             void send({
               type: "activation.start",
               article: runtime.article,
@@ -138,6 +173,12 @@ export default defineUnlistedScript(() => {
           }}
           onCommand={(command, value) => {
             const snapshot = runtime.snapshot;
+            appendDebug("content", "ui.command", {
+              command,
+              value: typeof value === "number" ? value : undefined,
+              status: snapshot?.status,
+              sentenceIndex: snapshot?.currentSentenceIndex,
+            });
             if (command === "close" && !snapshot) {
               remove();
               return;
@@ -164,10 +205,20 @@ export default defineUnlistedScript(() => {
             void send(payload);
           }}
           onOpenSettings={() => {
+            appendDebug("content", "ui.settings.open", {});
             void send({ type: "settings.open" });
           }}
         />,
       );
+    };
+
+    const appendDebug = (
+      scope: RuntimeDebugScope,
+      event: string,
+      data: Record<string, string | number | boolean | null | undefined>,
+    ) => {
+      runtime.debug.record(scope, event, data);
+      render();
     };
 
     const showExtractionRefusal = (
@@ -208,14 +259,30 @@ export default defineUnlistedScript(() => {
       installPageHighlightStyles();
       runtime.host.style.display = "block";
       runtime.state = { kind: "finding" };
-      render();
-      const result = extractSourcePage({
-        document,
-        selection: window.getSelection(),
-        sourceUrl: location.href,
-        chromeLanguage: chrome.i18n.getUILanguage(),
+      appendDebug("content", "extract.start", {
+        hasSelection: !window.getSelection()?.isCollapsed,
       });
+      let result: ExtractionResult;
+      try {
+        result = extractSourcePage({
+          document,
+          selection: window.getSelection(),
+          sourceUrl: location.href,
+          chromeLanguage: chrome.i18n.getUILanguage(),
+        });
+      } catch (error) {
+        runtime.state = {
+          kind: "error",
+          title: "Speak-O hit an extraction error",
+          message: "Copy the debug log below and paste it into the issue.",
+        };
+        appendDebug("content", "extract.error", {
+          error: summarizeDebugError(error),
+        });
+        return;
+      }
       if (!result.ok) {
+        appendDebug("content", "extract.refused", { reason: result.reason });
         showExtractionRefusal(result);
         void send({ type: "extraction.refused", reason: result.reason });
         return;
@@ -226,6 +293,12 @@ export default defineUnlistedScript(() => {
         new CssHighlightRegistry(),
         result.mappings,
       );
+      appendDebug("content", "extract.complete", {
+        extractor: result.snapshot.extractor,
+        blockCount: result.snapshot.blocks.length,
+        sentenceCount: result.snapshot.sentences.length,
+        mappingCount: result.mappings.length,
+      });
       void send({ type: "extraction.result", article: result.snapshot });
     };
 
@@ -257,9 +330,29 @@ export default defineUnlistedScript(() => {
       ) {
         return;
       }
+      if (
+        message.type === "content.debug.snapshot" &&
+        Array.isArray(message.entries)
+      ) {
+        runtime.debug.ingest(message.entries);
+        render();
+        return;
+      }
+      if (
+        message.type === "content.debug" &&
+        isRuntimeDebugEntry(message.entry)
+      ) {
+        runtime.debug.ingest([message.entry]);
+        render();
+        return;
+      }
       if (message.type === "extract.request") {
+        appendDebug("content", "extract.request.received", {});
         extract();
       } else if (message.type === "session.reconcile.request") {
+        appendDebug("content", "session.reconcile.requested", {
+          sentenceIndex: Number(message.currentSentenceIndex),
+        });
         const snapshot = runtime.snapshot;
         const article = runtime.article;
         const sentenceIndex = message.currentSentenceIndex;
@@ -278,12 +371,16 @@ export default defineUnlistedScript(() => {
           !sentence ||
           !runtime.highlighter?.validate(sentence.mappingIds)
         ) {
+          appendDebug("content", "session.reconcile.rejected", {});
           void send({
             type: "session.reconcile.failed",
             sessionId: message.sessionId,
           });
           return;
         }
+        appendDebug("content", "session.reconcile.accepted", {
+          sentenceIndex: snapshot.currentSentenceIndex,
+        });
         void send({
           type: "session.reconcile",
           sessionId: snapshot.id,
@@ -291,6 +388,9 @@ export default defineUnlistedScript(() => {
           article,
         });
       } else if (message.type === "onboarding.show") {
+        appendDebug("content", "onboarding.show", {
+          providerConnected: message.providerConnected === true,
+        });
         runtime.state = {
           kind: "onboarding",
           providerConnected: message.providerConnected === true,
@@ -307,6 +407,13 @@ export default defineUnlistedScript(() => {
         isRecord(message.snapshot)
       ) {
         const snapshot = message.snapshot as unknown as ReadingSessionSnapshot;
+        appendDebug("content", "session.render", {
+          mode: snapshot.mode,
+          status: snapshot.status,
+          sentenceIndex: snapshot.currentSentenceIndex,
+          generationEpoch: snapshot.generationEpoch,
+          session: snapshot.id.slice(-8),
+        });
         runtime.snapshot = snapshot;
         if (!snapshot.highlightsEnabled) runtime.highlighter?.clear();
         runtime.state = { kind: "session", snapshot };
@@ -335,6 +442,14 @@ export default defineUnlistedScript(() => {
                   sentence.startOffset + (message.word.endOffset as number),
               }
             : undefined;
+        if (word && runtime.lastDebugWordSentence !== sentenceIndex) {
+          runtime.lastDebugWordSentence = sentenceIndex as number;
+          appendDebug("content", "highlight.first-word", {
+            sentenceIndex: sentenceIndex as number,
+            startOffset: word.startOffset - sentence.startOffset,
+            endOffset: word.endOffset - sentence.startOffset,
+          });
+        }
         runtime.highlighter?.show(sentence.mappingIds, word, {
           startOffset: sentence.startOffset,
           endOffset: sentence.endOffset,
@@ -409,6 +524,9 @@ export default defineUnlistedScript(() => {
       }
     }, 1_000);
 
+    runtime.debug.record("content", "reader.mounted", {
+      extensionVersion: chrome.runtime.getManifest().version,
+    });
     render();
   }
 });

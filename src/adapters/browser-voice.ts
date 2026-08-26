@@ -21,12 +21,20 @@ export interface BrowserTtsEvent {
   errorMessage?: string;
 }
 
+export interface BrowserVoiceDiagnostic {
+  type: "attempt" | "accepted" | "rejected";
+  voiceName: string | null;
+  wordBoundariesRequired: boolean;
+  errorMessage?: string;
+}
+
 export interface BrowserTtsOptions {
   lang: string;
   voiceName?: string;
   rate: number;
   enqueue: false;
   desiredEventTypes: string[];
+  requiredEventTypes?: string[];
   onEvent(event: BrowserTtsEvent): void;
 }
 
@@ -92,6 +100,7 @@ export class BrowserVoiceAdapter {
   async speak(
     effect: SpeakEffect,
     onEvent: (event: BrowserSpeechEvent) => void,
+    onDiagnostic?: (diagnostic: BrowserVoiceDiagnostic) => void,
   ): Promise<void> {
     const utterance = { intentionallyStopped: false };
     this.currentUtterance = utterance;
@@ -145,6 +154,7 @@ export class BrowserVoiceAdapter {
             type: "error",
             sentenceIndex: effect.sentenceIndex,
             errorCode: "BROWSER_TTS_ERROR",
+            ...(event.errorMessage ? { errorMessage: event.errorMessage } : {}),
           });
         }
       },
@@ -160,26 +170,54 @@ export class BrowserVoiceAdapter {
         voiceName = null;
       }
     }
-    if (voiceName) options.voiceName = voiceName;
     if (utterance.intentionallyStopped || this.currentUtterance !== utterance) {
       return;
     }
 
-    try {
-      await this.tts.speak(effect.text, options);
-    } catch {
+    const attempts: BrowserTtsOptions[] = effect.voiceId
+      ? [{ ...options, voiceName: effect.voiceId }]
+      : [
+          {
+            ...options,
+            ...(voiceName ? { voiceName } : {}),
+            requiredEventTypes: ["word"],
+          },
+          options,
+        ];
+    for (const attempt of attempts) {
       if (
         utterance.intentionallyStopped ||
         this.currentUtterance !== utterance
       ) {
         return;
       }
-      onEvent({
-        type: "error",
-        sentenceIndex: effect.sentenceIndex,
-        errorCode: "BROWSER_TTS_FAILED",
-      });
+      const diagnostic = {
+        voiceName: attempt.voiceName ?? null,
+        wordBoundariesRequired:
+          attempt.requiredEventTypes?.includes("word") === true,
+      };
+      onDiagnostic?.({ type: "attempt", ...diagnostic });
+      try {
+        await this.tts.speak(effect.text, attempt);
+        onDiagnostic?.({ type: "accepted", ...diagnostic });
+        return;
+      } catch (error) {
+        onDiagnostic?.({
+          type: "rejected",
+          ...diagnostic,
+          errorMessage:
+            error instanceof Error ? error.message : "Chrome Voice rejected",
+        });
+      }
     }
+    if (utterance.intentionallyStopped || this.currentUtterance !== utterance) {
+      return;
+    }
+    onEvent({
+      type: "error",
+      sentenceIndex: effect.sentenceIndex,
+      errorCode: "BROWSER_TTS_FAILED",
+    });
   }
 
   pause(): void {

@@ -171,4 +171,30 @@ describe("floating Reader accessibility", () => {
     ).toHaveAttribute("aria-valuetext", "25 percent");
     expect(screen.queryByRole("slider")).not.toBeInTheDocument();
   });
+
+  it("shows and copies the debug trace while Article discovery is stuck", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    render(
+      <ReaderApp
+        state={{ kind: "finding" }}
+        debugLog={"Speak-O DEBUG_MODE=true\n[content] extract.start"}
+        onChooseMode={vi.fn()}
+        onCommand={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    expect(
+      (screen.getByLabelText("Speak-O debug log") as HTMLTextAreaElement).value,
+    ).toContain("extract.start");
+    await user.click(screen.getByRole("button", { name: "Copy debug log" }));
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("extract.start"),
+    );
+  });
 });

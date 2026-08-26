@@ -2,6 +2,7 @@ import {
   BrowserVoiceAdapter,
   type BrowserTtsOptions,
   type BrowserTtsPort,
+  type BrowserVoiceDiagnostic,
 } from "../../src/adapters/browser-voice";
 import type { ReadingSessionEffect } from "../../src/session/types";
 
@@ -176,6 +177,78 @@ describe("Browser Voice adapter contract", () => {
     );
 
     expect(capturedOptions?.voiceName).toBe("Word Voice");
+    expect(capturedOptions?.requiredEventTypes).toEqual(["word"]);
+  });
+
+  it("falls back to sentence-only narration when Chrome has no word-boundary voice", async () => {
+    const attempts: BrowserTtsOptions[] = [];
+    const port: BrowserTtsPort = {
+      async getVoices() {
+        return [
+          {
+            voiceName: "Sentence Voice",
+            lang: "en-US",
+            eventTypes: ["start", "end"],
+          },
+        ];
+      },
+      async speak(_text, options) {
+        attempts.push(options);
+        if (options.requiredEventTypes?.includes("word")) {
+          throw new Error("No matching voice with the required event types");
+        }
+        options.onEvent({ type: "start", charIndex: 0 });
+      },
+      pause: vi.fn(),
+      resume: vi.fn(),
+      stop: vi.fn(),
+    };
+    const adapter = new BrowserVoiceAdapter(port);
+    const events: unknown[] = [];
+    const diagnostics: BrowserVoiceDiagnostic[] = [];
+
+    await adapter.speak(
+      {
+        type: "browser.speak",
+        sessionId: "session-sentence-fallback",
+        generationEpoch: 1,
+        sentenceIndex: 0,
+        text: "Keep sentence narration available.",
+        language: "en-US",
+        voiceId: null,
+        playbackSpeed: 1,
+      },
+      (event) => events.push(event),
+      (diagnostic) => diagnostics.push(diagnostic),
+    );
+
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toMatchObject({ requiredEventTypes: ["word"] });
+    expect(attempts[1]).not.toHaveProperty("requiredEventTypes");
+    expect(events).toEqual([{ type: "start", sentenceIndex: 0 }]);
+    expect(diagnostics).toEqual([
+      {
+        type: "attempt",
+        voiceName: null,
+        wordBoundariesRequired: true,
+      },
+      {
+        type: "rejected",
+        voiceName: null,
+        wordBoundariesRequired: true,
+        errorMessage: "No matching voice with the required event types",
+      },
+      {
+        type: "attempt",
+        voiceName: null,
+        wordBoundariesRequired: false,
+      },
+      {
+        type: "accepted",
+        voiceName: null,
+        wordBoundariesRequired: false,
+      },
+    ]);
   });
   it("speaks one sentence through chrome.tts options and reports capability events", async () => {
     let capturedText = "";
@@ -189,6 +262,7 @@ describe("Browser Voice adapter contract", () => {
         options.onEvent({ type: "resume" });
         options.onEvent({ type: "interrupted" });
         options.onEvent({ type: "cancelled" });
+        options.onEvent({ type: "error", errorMessage: "Voice unavailable" });
         options.onEvent({ type: "end", charIndex: text.length });
       },
       pause: vi.fn(),
@@ -234,6 +308,12 @@ describe("Browser Voice adapter contract", () => {
       { type: "resume", sentenceIndex: 3 },
       { type: "interrupted", sentenceIndex: 3 },
       { type: "cancelled", sentenceIndex: 3 },
+      {
+        type: "error",
+        sentenceIndex: 3,
+        errorCode: "BROWSER_TTS_ERROR",
+        errorMessage: "Voice unavailable",
+      },
       { type: "end", sentenceIndex: 3 },
     ]);
   });

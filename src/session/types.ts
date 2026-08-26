@@ -100,7 +100,12 @@ export type BrowserSpeechEvent =
   | { type: "cancelled"; sentenceIndex: number }
   | { type: "word"; sentenceIndex: number; charIndex: number; length: number }
   | { type: "end"; sentenceIndex: number }
-  | { type: "error"; sentenceIndex: number; errorCode: string };
+  | {
+      type: "error";
+      sentenceIndex: number;
+      errorCode: string;
+      errorMessage?: string;
+    };
 
 export type ReadingSessionCommand =
   | {

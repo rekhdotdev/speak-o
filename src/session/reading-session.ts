@@ -406,18 +406,21 @@ export class ReadingSessionController {
 
   private play(): ReadingSessionTransition {
     const active = this.requireActive();
+    if (
+      active.snapshot.status === "paused" &&
+      active.snapshot.mode === "browser"
+    ) {
+      active.canResumeMedia = false;
+      const restarted = this.playBrowser();
+      return {
+        snapshot: restarted.snapshot,
+        effects: [
+          this.contextEffect(active.snapshot, { type: "browser.stop" }),
+          ...restarted.effects,
+        ],
+      };
+    }
     if (active.snapshot.status === "paused" && active.canResumeMedia) {
-      if (active.snapshot.mode === "browser") {
-        active.canResumeMedia = false;
-        const restarted = this.playBrowser();
-        return {
-          snapshot: restarted.snapshot,
-          effects: [
-            this.contextEffect(active.snapshot, { type: "browser.stop" }),
-            ...restarted.effects,
-          ],
-        };
-      }
       active.snapshot = {
         ...active.snapshot,
         status: "playing",
@@ -1250,6 +1253,12 @@ export class ReadingSessionController {
     }
 
     if (event.type === "start") {
+      if (active.snapshot.status === "paused") {
+        return this.transition([
+          this.contextEffect(active.snapshot, { type: "browser.pause" }),
+        ]);
+      }
+      if (active.snapshot.status !== "playing") return this.transition([]);
       active.snapshot = {
         ...active.snapshot,
         status: "playing",
@@ -1277,6 +1286,12 @@ export class ReadingSessionController {
       ]);
     }
     if (event.type === "resume") {
+      if (active.snapshot.status === "paused") {
+        return this.transition([
+          this.contextEffect(active.snapshot, { type: "browser.pause" }),
+        ]);
+      }
+      if (active.snapshot.status !== "playing") return this.transition([]);
       active.snapshot = {
         ...active.snapshot,
         status: "playing",
@@ -1305,6 +1320,7 @@ export class ReadingSessionController {
       ]);
     }
     if (event.type === "word") {
+      if (active.snapshot.status !== "playing") return this.transition([]);
       return this.transition([
         this.contextEffect(active.snapshot, {
           type: "content.highlight",

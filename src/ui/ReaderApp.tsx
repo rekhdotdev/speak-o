@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DEBUG_MODE } from "../diagnostics/runtime-debug";
 import type { ReadingSessionSnapshot } from "../session/types";
 import {
   PLAYBACK_SPEEDS,
@@ -25,9 +26,59 @@ export type ReaderViewState =
 
 interface ReaderAppProps {
   state: ReaderViewState;
+  debugLog?: string;
   onChooseMode(mode: VoiceMode): void;
   onCommand(command: string, value?: number): void;
   onOpenSettings(): void;
+}
+
+function DebugPanel({ log, dock }: { log: string; dock: "top" | "bottom" }) {
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
+  const textArea = useRef<HTMLTextAreaElement>(null);
+
+  if (!DEBUG_MODE) return null;
+
+  const copy = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(log);
+      } else {
+        textArea.current?.select();
+        if (!document.execCommand("copy")) throw new Error("Copy failed");
+      }
+      setCopyStatus("copied");
+    } catch {
+      textArea.current?.select();
+      setCopyStatus("failed");
+    }
+  };
+
+  return (
+    <details className={`debug-panel debug-panel-${dock}`} open>
+      <summary>DEBUG_MODE is on</summary>
+      <textarea
+        ref={textArea}
+        aria-label="Speak-O debug log"
+        readOnly
+        spellCheck={false}
+        value={log}
+      />
+      <div className="debug-actions">
+        <button type="button" onClick={() => void copy()}>
+          Copy debug log
+        </button>
+        <span role="status">
+          {copyStatus === "copied"
+            ? "Copied"
+            : copyStatus === "failed"
+              ? "Copy failed; press Ctrl/Cmd+C"
+              : "No Article text, URLs, credentials, or audio are logged"}
+        </span>
+      </div>
+    </details>
+  );
 }
 
 function formatRemaining(seconds: number): string {
@@ -65,6 +116,7 @@ function IconButton({
 
 export function ReaderApp({
   state,
+  debugLog = "Speak-O DEBUG_MODE=true\nentries=0/160\n<no events>",
   onChooseMode,
   onCommand,
   onOpenSettings,
@@ -134,8 +186,15 @@ export function ReaderApp({
     }
   };
 
+  const renderWithDebug = (reader: React.ReactNode) => (
+    <>
+      {reader}
+      <DebugPanel log={debugLog} dock={snapshot?.dock ?? "bottom"} />
+    </>
+  );
+
   if (state.kind === "finding") {
-    return (
+    return renderWithDebug(
       <section
         className="reader-shell finding"
         aria-label="Speak-O Article Reader"
@@ -145,12 +204,12 @@ export function ReaderApp({
           S
         </span>
         <span>Finding the Article…</span>
-      </section>
+      </section>,
     );
   }
 
   if (state.kind === "error") {
-    return (
+    return renderWithDebug(
       <section
         className="reader-shell error-card"
         aria-label="Speak-O Article Reader"
@@ -162,12 +221,12 @@ export function ReaderApp({
         <IconButton label="Close Speak-O" onClick={() => command("close")}>
           <CloseIcon />
         </IconButton>
-      </section>
+      </section>,
     );
   }
 
   if (state.kind === "onboarding") {
-    return (
+    return renderWithDebug(
       <section className="reader-shell onboarding" aria-label="Set up Speak-O">
         <div className="onboarding-copy">
           <span className="eyebrow">Speak-O public beta</span>
@@ -193,16 +252,16 @@ export function ReaderApp({
             {state.providerConnected ? "Use ElevenLabs" : "Connect ElevenLabs"}
           </button>
         </div>
-      </section>
+      </section>,
     );
   }
 
-  if (!snapshot) return null;
+  if (!snapshot) return renderWithDebug(null);
   const dock = snapshot.dock;
   const theme = snapshot.theme;
 
   if (minimized) {
-    return (
+    return renderWithDebug(
       <section
         className={`reader-shell compact dock-${dock}`}
         data-theme={theme}
@@ -233,11 +292,11 @@ export function ReaderApp({
         >
           <MaximizeIcon />
         </IconButton>
-      </section>
+      </section>,
     );
   }
 
-  return (
+  return renderWithDebug(
     <section
       className={`reader-shell dock-${dock}`}
       data-theme={theme}
@@ -409,6 +468,6 @@ export function ReaderApp({
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {statusAnnouncement}
       </div>
-    </section>
+    </section>,
   );
 }
