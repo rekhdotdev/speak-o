@@ -289,6 +289,66 @@ describe("Cloud Voice Generation Window", () => {
     expect(JSON.stringify(received.effects)).not.toContain("apiKey");
   });
 
+  it("uses complete sentence alignment to highlight against the media clock", () => {
+    const controller = new ReadingSessionController(() => "aligned-session");
+    const sentence = "One cloud sentence.";
+    controller.dispatch({
+      type: "activate",
+      article: cloudArticle(),
+      sourceTabId: 11,
+      sourceFrameId: 0,
+      mode: "cloud",
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        voiceByLanguage: { "en-US": "voice-1" },
+      },
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "aligned-session",
+      generationEpoch: 1,
+    });
+    controller.dispatch({
+      type: "provider.event",
+      sessionId: "aligned-session",
+      generationEpoch: 1,
+      event: {
+        type: "audio",
+        sentenceIndex: 0,
+        audioBase64: "AQID",
+        alignment: {
+          chars: Array.from(sentence),
+          charStartTimesMs: Array.from(
+            { length: sentence.length },
+            (_, index) => index * 100,
+          ),
+          charDurationsMs: Array.from({ length: sentence.length }, () => 100),
+        },
+        acknowledged: true,
+        isFinal: false,
+      },
+    });
+
+    const progress = controller.dispatch({
+      type: "audio.event",
+      sessionId: "aligned-session",
+      generationEpoch: 1,
+      event: {
+        type: "progress",
+        sentenceIndex: 0,
+        mediaTimeMs: 450,
+      },
+    });
+
+    expect(progress.effects).toContainEqual(
+      expect.objectContaining({
+        type: "content.highlight",
+        sentenceIndex: 0,
+        word: { startOffset: 4, endOffset: 9 },
+      }),
+    );
+  });
+
   it("resumes the existing Cloud Voice audio after a pause", () => {
     const controller = new ReadingSessionController(() => "cloud-resume");
     controller.dispatch({
@@ -423,6 +483,70 @@ describe("Cloud Voice Generation Window", () => {
     });
     expect(confirmed.effects).toContainEqual(
       expect.objectContaining({ type: "provider.generate" }),
+    );
+  });
+
+  it("retries only unfinished sentences after a partially completed burst", () => {
+    const controller = new ReadingSessionController(() => "partial-session");
+    controller.dispatch({
+      type: "activate",
+      article: cloudArticle(),
+      sourceTabId: 11,
+      sourceFrameId: 0,
+      mode: "cloud",
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        voiceByLanguage: { "en-US": "voice-1" },
+      },
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "partial-session",
+      generationEpoch: 1,
+    });
+    controller.dispatch({
+      type: "provider.event",
+      sessionId: "partial-session",
+      generationEpoch: 1,
+      event: {
+        type: "audio",
+        sentenceIndex: 0,
+        audioBase64: "AQID",
+        alignment: null,
+        acknowledged: true,
+        isFinal: false,
+      },
+    });
+
+    const failed = controller.dispatch({
+      type: "provider.event",
+      sessionId: "partial-session",
+      generationEpoch: 1,
+      event: {
+        type: "failure",
+        errorCode: "CONNECTION_DROPPED",
+        acknowledged: true,
+        receivedAudio: true,
+      },
+    });
+    expect(failed.snapshot).toMatchObject({
+      status: "provider-issue",
+      retryRequiresConfirmation: true,
+    });
+
+    const confirmed = controller.dispatch({
+      type: "retry-provider",
+      sessionId: "partial-session",
+      generationEpoch: 1,
+    });
+    expect(confirmed.effects).toContainEqual(
+      expect.objectContaining({
+        type: "provider.generate",
+        sentences: [
+          { index: 1, text: "Two cloud sentence." },
+          { index: 2, text: "Three cloud sentence." },
+        ],
+      }),
     );
   });
 
@@ -577,5 +701,85 @@ describe("Cloud Voice Generation Window", () => {
     expect(
       next.effects.some((effect) => effect.type === "provider.generate"),
     ).toBe(false);
+  });
+
+  it("requires confirmation before regenerating previously submitted audio that was evicted", () => {
+    const controller = new ReadingSessionController(() => "evicted-session");
+    controller.dispatch({
+      type: "activate",
+      article: cloudArticle(),
+      sourceTabId: 11,
+      sourceFrameId: 0,
+      mode: "cloud",
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        voiceByLanguage: { "en-US": "voice-1" },
+      },
+    });
+    controller.dispatch({
+      type: "play",
+      sessionId: "evicted-session",
+      generationEpoch: 1,
+    });
+    for (const sentenceIndex of [0, 1, 2]) {
+      controller.dispatch({
+        type: "provider.event",
+        sessionId: "evicted-session",
+        generationEpoch: 1,
+        event: {
+          type: "audio",
+          sentenceIndex,
+          audioBase64: "AQID",
+          alignment: null,
+          acknowledged: true,
+          isFinal: sentenceIndex === 2,
+        },
+      });
+    }
+    for (const sentenceIndex of [0, 1]) {
+      controller.dispatch({
+        type: "audio.event",
+        sessionId: "evicted-session",
+        generationEpoch: 1,
+        event: { type: "ended", sentenceIndex },
+      });
+    }
+
+    controller.dispatch({
+      type: "previous",
+      sessionId: "evicted-session",
+      generationEpoch: 1,
+      elapsedInSentenceMs: 0,
+    });
+    const confirmation = controller.dispatch({
+      type: "previous",
+      sessionId: "evicted-session",
+      generationEpoch: 1,
+      elapsedInSentenceMs: 0,
+    });
+
+    expect(confirmation.snapshot).toMatchObject({
+      currentSentenceIndex: 0,
+      status: "provider-issue",
+      errorCode: "EVICTED_AUDIO_REGENERATION",
+      retryRequiresConfirmation: true,
+    });
+    expect(
+      confirmation.effects.some(
+        (effect) => effect.type === "provider.generate",
+      ),
+    ).toBe(false);
+
+    const confirmed = controller.dispatch({
+      type: "retry-provider",
+      sessionId: "evicted-session",
+      generationEpoch: 1,
+    });
+    expect(confirmed.effects).toContainEqual(
+      expect.objectContaining({
+        type: "provider.generate",
+        sentences: [{ index: 0, text: "One cloud sentence." }],
+      }),
+    );
   });
 });

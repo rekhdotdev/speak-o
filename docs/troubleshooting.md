@@ -20,6 +20,10 @@ Open settings and choose a Voice exposed by Chrome or the operating system. A Vo
 
 Confirm the API Region, key validity, and network connection. Denying Chrome's optional origin prompt leaves the credential unsaved. A key is validated with metadata requests before connection. Disconnect and reconnect to replace an invalid or expired key.
 
+## Capture a provider debug log
+
+For a deliberate diagnostic build, run `WXT_DEBUG_MODE=true npm run build`, then reload `.output/chrome-mv3` from `chrome://extensions`. Reproduce the problem and open **Settings → Privacy & diagnostics**. The debug log records the selected region, Model and Voice identifiers, generation window, socket lifecycle, outbound message shape, audio/alignment counters, numeric close codes, provider error-field presence, or sanitized network exception. Raw provider messages and close reasons are omitted because they can echo submitted prose. It does not include the Provider Credential, request headers, Article text, generated audio, or full URLs. Use **Copy debug log** to send the result with the failure message.
+
 ## Cloud Voice pauses or reports a provider issue
 
 Speak-O never silently falls back. Use the attached action to confirm a retry when Provider Usage may have occurred, reconnect or choose a compatible Voice or Model, switch explicitly to Chrome Voice, or stop. A Usage guard pause is deliberate; continuing disables that guard for the current Reading Session only.

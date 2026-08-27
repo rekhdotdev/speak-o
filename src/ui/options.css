@@ -163,7 +163,8 @@ small {
 .provider-card,
 .setting-row,
 .voice-picker,
-.privacy-copy {
+.privacy-copy,
+.debug-log-card {
   padding: 18px;
   background: var(--surface-raised);
   border-radius: 16px;
@@ -379,6 +380,40 @@ kbd {
 .privacy-copy p:last-child {
   margin-block-end: 0;
 }
+.debug-log-card {
+  display: grid;
+  gap: 10px;
+}
+.debug-log-heading {
+  display: grid;
+  gap: 4px;
+}
+.debug-log-card textarea {
+  inline-size: 100%;
+  min-block-size: 240px;
+  padding: 8px;
+  color: var(--ink);
+  font:
+    12px/1.4 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  white-space: pre;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  resize: vertical;
+}
+.debug-log-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.debug-log-actions span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
 footer {
   display: flex;
   justify-content: space-between;
@@ -469,6 +504,7 @@ footer {
   .setting-row,
   .voice-picker,
   .privacy-copy,
+  .debug-log-card,
   .primary-button,
   .secondary-button {
     border: 1px solid CanvasText;

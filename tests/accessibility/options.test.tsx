@@ -28,6 +28,8 @@ const activeOptionsState = {
     modelId: null,
     errorCodes: [],
   },
+  debugLog:
+    'Speak-O DEBUG_MODE=true\nprovider.metadata.response {"status":404}\nprovider.connection.failed {"error":"Provider unavailable"}',
 } as const;
 
 const storageChangedMock = {
@@ -249,6 +251,28 @@ describe("options accessibility", () => {
       provider: "browser",
       modelId: null,
     });
+  });
+
+  it("shows and copies the provider debug log without credentials", async () => {
+    vi.stubGlobal("chrome", chromeMock);
+    render(<OptionsApp />);
+
+    const debugLog = await screen.findByRole("textbox", {
+      name: "Speak-O debug log",
+    });
+    expect((debugLog as HTMLTextAreaElement).value).toContain('"status":404');
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy debug log" }));
+
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        expect.stringContaining("provider.connection.failed"),
+      ),
+    );
+    const copied = vi
+      .mocked(navigator.clipboard.writeText)
+      .mock.calls.at(-1)?.[0];
+    expect(String(copied)).not.toContain("sk_");
   });
 
   it("does not fabricate diagnostics without an active session", async () => {

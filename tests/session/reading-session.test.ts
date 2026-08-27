@@ -566,6 +566,8 @@ describe("Reading Session interface", () => {
         currentSentenceIndex: 1,
         mediaTimeMs: 740,
         status: "playing",
+        submittedCharacters: 15,
+        submittedSentenceIndices: [0, 1, 2],
       },
       preferences: {
         ...DEFAULT_PREFERENCES,
@@ -588,6 +590,7 @@ describe("Reading Session interface", () => {
       currentSentenceIndex: 1,
       status: "paused",
       notice: "sessionNoticeRestoredPaused",
+      submittedCharacters: 15,
     });
     expect(restored.effects.map((effect) => effect.type)).toEqual([
       "browser.stop",
@@ -621,6 +624,23 @@ describe("Reading Session interface", () => {
     );
     expect(
       resumed.effects.some((effect) => effect.type === "provider.generate"),
+    ).toBe(false);
+
+    const previous = controller.dispatch({
+      type: "previous",
+      sessionId: "session-recovery",
+      generationEpoch: 10,
+      elapsedInSentenceMs: 0,
+    });
+    expect(previous.snapshot).toMatchObject({
+      currentSentenceIndex: 0,
+      status: "provider-issue",
+      errorCode: "EVICTED_AUDIO_REGENERATION",
+      retryRequiresConfirmation: true,
+      submittedCharacters: 15,
+    });
+    expect(
+      previous.effects.some((effect) => effect.type === "provider.generate"),
     ).toBe(false);
   });
 });

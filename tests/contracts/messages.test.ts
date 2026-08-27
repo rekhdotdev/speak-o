@@ -57,6 +57,27 @@ describe("runtime message contract", () => {
     expect(
       isExtensionMessage({
         version: 1,
+        target: "background",
+        type: "session.command",
+        sessionId: "session-settings",
+        generationEpoch: 7,
+        command: "settings.open",
+      }),
+    ).toBe(false);
+    expect(
+      isExtensionMessage({
+        version: 1,
+        target: "background",
+        type: "session.command",
+        sessionId: "session-settings",
+        generationEpoch: 7,
+        command: "seek",
+        value: 12,
+      }),
+    ).toBe(true);
+    expect(
+      isExtensionMessage({
+        version: 1,
         target: "offscreen",
         type: "audio.pause",
       }),
@@ -134,6 +155,8 @@ describe("runtime message contract", () => {
         currentSentenceIndex: 2,
         mediaTimeMs: 1200,
         status: "paused",
+        submittedCharacters: 240,
+        submittedSentenceIndices: [0, 1, 2],
       }),
     ).toBe(true);
     expect(
@@ -145,6 +168,8 @@ describe("runtime message contract", () => {
         mode: "cloud",
         currentSentenceIndex: 2,
         status: "paused",
+        submittedCharacters: 240,
+        submittedSentenceIndices: [0, 1, 2],
       }),
     ).toBe(false);
 

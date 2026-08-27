@@ -106,8 +106,6 @@ export default defineBackground(() => {
     protectedStorageArea(chrome.storage.session),
     protectedStorageArea(chrome.storage.local),
   );
-  const metadataClient = new ElevenLabsMetadataClient();
-  const providerTransport = new ElevenLabsTransport();
   const sessionBuffer = new SessionBuffer();
   const transitionEffects = new SerialTaskQueue();
   const preferenceUpdates = new SerialTaskQueue();
@@ -119,6 +117,13 @@ export default defineBackground(() => {
   let settlePendingReconciliation: (() => void) | null = null;
   let sentenceStartedAt = 0;
   let lastDebugWordKey = "";
+  let lastCloudProgress: {
+    sessionId: string;
+    generationEpoch: number;
+    sentenceIndex: number;
+    receivedAt: number;
+    mediaTimeMs: number;
+  } | null = null;
   let activeArticle: {
     sessionId: string;
     article: ArticleSnapshot;
@@ -203,15 +208,51 @@ export default defineBackground(() => {
     }
   };
 
+  const recordDebug = (
+    scope: RuntimeDebugScope,
+    event: string,
+    data: Record<string, string | number | boolean | null | undefined> = {},
+  ) => {
+    const entry = debug.record(scope, event, data);
+    if (DEBUG_MODE) {
+      console.debug(`[Speak-O:${scope}] ${event}`, entry.data ?? {});
+    }
+    return entry;
+  };
+
   const emitDebug = (
     scope: RuntimeDebugScope,
     event: string,
     data: Record<string, string | number | boolean | null | undefined> = {},
     target?: ContentTarget,
   ) => {
-    const entry = debug.record(scope, event, data);
+    const entry = recordDebug(scope, event, data);
     if (target) void sendDebugEntry(target, entry);
   };
+
+  const broadcastDebug = (
+    scope: RuntimeDebugScope,
+    event: string,
+    data: Record<string, string | number | boolean | null | undefined> = {},
+  ) => {
+    const entry = recordDebug(scope, event, data);
+    if (DEBUG_MODE) {
+      for (const target of new Set(sessionTargets.values())) {
+        void sendDebugEntry(target, entry);
+      }
+    }
+    return entry;
+  };
+
+  const metadataClient = new ElevenLabsMetadataClient(fetch, (event, data) => {
+    broadcastDebug("background", event, data);
+  });
+  const providerTransport = new ElevenLabsTransport(
+    undefined,
+    (event, data) => {
+      broadcastDebug("background", event, data);
+    },
+  );
 
   const sendDebugSnapshot = async (target: ContentTarget) => {
     if (!DEBUG_MODE) return;
@@ -363,8 +404,29 @@ export default defineBackground(() => {
       { version: 1, target: "offscreen", ...message },
     );
 
-  const executeTransition = (transition: ReadingSessionTransition) =>
-    transitionEffects.run(() => performTransition(transition));
+  const executeTransition = (transition: ReadingSessionTransition) => {
+    const queuedAt = Date.now();
+    const highlightEffect = transition.effects.find(
+      (effect) => effect.type === "content.highlight",
+    );
+    return transitionEffects.run(() => {
+      const queueDelayMs = Math.max(0, Date.now() - queuedAt);
+      if (highlightEffect && queueDelayMs >= 750) {
+        emitDebug(
+          "background",
+          "highlight.queue-delay",
+          {
+            sentenceIndex: highlightEffect.sentenceIndex,
+            queueDelayMs,
+            generationEpoch: highlightEffect.generationEpoch,
+            session: highlightEffect.sessionId.slice(-8),
+          },
+          sessionTargets.get(highlightEffect.sessionId),
+        );
+      }
+      return performTransition(transition);
+    });
+  };
 
   async function performTransition(
     transition: ReadingSessionTransition,
@@ -489,6 +551,16 @@ export default defineBackground(() => {
           case "provider.generate": {
             const credential = await credentials.load();
             if (!credential) {
+              emitDebug(
+                "background",
+                "provider.generate.credential-missing",
+                {
+                  requestId: effect.requestId.slice(-24),
+                  session: effect.sessionId.slice(-8),
+                  generationEpoch: effect.generationEpoch,
+                },
+                target,
+              );
               await performTransition(
                 controller.dispatch({
                   type: "provider.event",
@@ -504,10 +576,48 @@ export default defineBackground(() => {
               );
               break;
             }
+            emitDebug(
+              "background",
+              "provider.generate.start",
+              {
+                requestId: effect.requestId.slice(-24),
+                session: effect.sessionId.slice(-8),
+                generationEpoch: effect.generationEpoch,
+                region: effect.region,
+                modelId: effect.modelId,
+                voiceId: effect.voiceId,
+                sentenceCount: effect.sentences.length,
+                firstSentenceIndex: effect.sentences[0]?.index ?? null,
+                lastSentenceIndex: effect.sentences.at(-1)?.index ?? null,
+              },
+              target,
+            );
             providerTransport.generateBurst(
               effect,
               credential,
               (providerEvent) => {
+                emitDebug(
+                  "background",
+                  "provider.generate.event",
+                  {
+                    requestId: providerEvent.requestId.slice(-24),
+                    type: providerEvent.type,
+                    ...(providerEvent.type === "audio"
+                      ? {
+                          sentenceIndex: providerEvent.sentenceIndex,
+                          audioLength: providerEvent.audioBase64.length,
+                          alignmentCharCount:
+                            providerEvent.alignment?.chars.length ?? 0,
+                          isFinal: providerEvent.isFinal,
+                        }
+                      : {
+                          errorCode: providerEvent.errorCode,
+                          acknowledged: providerEvent.acknowledged,
+                          receivedAudio: providerEvent.receivedAudio,
+                        }),
+                  },
+                  target,
+                );
                 const event: ProviderEvent =
                   providerEvent.type === "audio"
                     ? {
@@ -537,12 +647,39 @@ export default defineBackground(() => {
             break;
           }
           case "provider.abort":
+            emitDebug(
+              "background",
+              "provider.abort",
+              {
+                generationEpoch: effect.generationEpoch,
+                session: effect.sessionId.slice(-8),
+              },
+              target,
+            );
             providerTransport.abortAll();
             break;
           case "provider.pause-prefetch":
+            emitDebug(
+              "background",
+              "provider.prefetch.pause",
+              {
+                generationEpoch: effect.generationEpoch,
+                session: effect.sessionId.slice(-8),
+              },
+              target,
+            );
             providerTransport.pausePrefetch();
             break;
           case "provider.resume-prefetch":
+            emitDebug(
+              "background",
+              "provider.prefetch.resume",
+              {
+                generationEpoch: effect.generationEpoch,
+                session: effect.sessionId.slice(-8),
+              },
+              target,
+            );
             providerTransport.resumePrefetch();
             break;
           case "buffer.store": {
@@ -567,6 +704,25 @@ export default defineBackground(() => {
             break;
           case "audio.play":
             sentenceStartedAt = Date.now();
+            lastCloudProgress = null;
+            emitDebug(
+              "offscreen",
+              "audio.play.request",
+              {
+                sentenceIndex: effect.sentenceIndex,
+                startAtMs: effect.startAtMs,
+                playbackSpeed: effect.playbackSpeed,
+                alignmentCharCount: effect.alignment?.chars.length ?? 0,
+                alignmentStartMs: effect.alignment?.charStartTimesMs[0] ?? null,
+                alignmentEndMs: effect.alignment
+                  ? (effect.alignment.charStartTimesMs.at(-1) ?? 0) +
+                    (effect.alignment.charDurationsMs.at(-1) ?? 0)
+                  : null,
+                generationEpoch: effect.generationEpoch,
+                session: effect.sessionId.slice(-8),
+              },
+              target,
+            );
             await ensureOffscreen();
             await sendOffscreen(effect);
             break;
@@ -609,11 +765,26 @@ export default defineBackground(() => {
             break;
           case "content.highlight":
             if (target) {
+              const highlightStartedAt = Date.now();
               await sendToContent(target, {
                 type: "content.highlight",
                 sentenceIndex: effect.sentenceIndex,
                 word: effect.word,
               });
+              const deliveryMs = Math.max(0, Date.now() - highlightStartedAt);
+              if (deliveryMs >= 500) {
+                emitDebug(
+                  "background",
+                  "highlight.delivery-slow",
+                  {
+                    sentenceIndex: effect.sentenceIndex,
+                    deliveryMs,
+                    generationEpoch: effect.generationEpoch,
+                    session: effect.sessionId.slice(-8),
+                  },
+                  target,
+                );
+              }
             }
             break;
           case "content.clear-highlights":
@@ -1024,7 +1195,8 @@ export default defineBackground(() => {
     );
   };
 
-  const settingsOpened = (context: CommandContext) => {
+  const settingsOpened = ({ sessionId, generationEpoch }: CommandContext) => {
+    const context = { sessionId, generationEpoch };
     if (!matchesCurrentSession(context)) return;
     void executeTransition(
       controller.dispatch({
@@ -1034,7 +1206,8 @@ export default defineBackground(() => {
     );
   };
 
-  const settingsClosed = (context: CommandContext) => {
+  const settingsClosed = ({ sessionId, generationEpoch }: CommandContext) => {
+    const context = { sessionId, generationEpoch };
     void preferenceUpdates.run(async () => {
       const currentPreferences = await preferences.load();
       if (!matchesCurrentSession(context)) return;
@@ -1049,9 +1222,10 @@ export default defineBackground(() => {
   };
 
   const applyChangedSettings = async (
-    context: CommandContext,
+    { sessionId, generationEpoch }: CommandContext,
     currentPreferences: Preferences,
   ) => {
+    const context = { sessionId, generationEpoch };
     if (!matchesCurrentSession(context)) return;
     await executeTransition(
       controller.dispatch({
@@ -1070,7 +1244,8 @@ export default defineBackground(() => {
     }
   };
 
-  const settingsChanged = (context: CommandContext) => {
+  const settingsChanged = ({ sessionId, generationEpoch }: CommandContext) => {
+    const context = { sessionId, generationEpoch };
     if (!matchesCurrentSession(context)) return;
     void preferenceUpdates.run(async () => {
       const currentPreferences = await preferences.load();
@@ -1356,20 +1531,92 @@ export default defineBackground(() => {
         if (
           raw.type === "progress" &&
           Number.isSafeInteger(raw.sentenceIndex) &&
-          typeof raw.mediaTimeMs === "number"
+          typeof raw.mediaTimeMs === "number" &&
+          Number.isFinite(raw.mediaTimeMs) &&
+          raw.mediaTimeMs >= 0
         ) {
+          const receivedAt = Date.now();
+          const sentenceIndex = raw.sentenceIndex as number;
+          const mediaTimeMs = raw.mediaTimeMs;
+          const samePlayback =
+            lastCloudProgress?.sessionId === snapshot.id &&
+            lastCloudProgress.generationEpoch === snapshot.generationEpoch &&
+            lastCloudProgress.sentenceIndex === sentenceIndex;
+          if (!samePlayback || !lastCloudProgress) {
+            emitDebug(
+              "offscreen",
+              "audio.progress.first",
+              {
+                sentenceIndex,
+                mediaTimeMs,
+                generationEpoch: snapshot.generationEpoch,
+                session: snapshot.id.slice(-8),
+              },
+              sessionTargets.get(snapshot.id),
+            );
+          } else {
+            const wallGapMs = Math.max(
+              0,
+              receivedAt - lastCloudProgress.receivedAt,
+            );
+            const mediaGapMs = mediaTimeMs - lastCloudProgress.mediaTimeMs;
+            if (wallGapMs >= 1_000 || Math.abs(mediaGapMs) >= 1_000) {
+              emitDebug(
+                "offscreen",
+                "audio.progress.gap",
+                {
+                  sentenceIndex,
+                  previousMediaTimeMs: lastCloudProgress.mediaTimeMs,
+                  mediaTimeMs,
+                  mediaGapMs,
+                  wallGapMs,
+                  generationEpoch: snapshot.generationEpoch,
+                  session: snapshot.id.slice(-8),
+                },
+                sessionTargets.get(snapshot.id),
+              );
+            }
+          }
+          lastCloudProgress = {
+            sessionId: snapshot.id,
+            generationEpoch: snapshot.generationEpoch,
+            sentenceIndex,
+            receivedAt,
+            mediaTimeMs,
+          };
           event = {
             type: "progress",
-            sentenceIndex: raw.sentenceIndex as number,
-            mediaTimeMs: raw.mediaTimeMs,
+            sentenceIndex,
+            mediaTimeMs,
           };
         } else if (
           raw.type === "ended" &&
           Number.isSafeInteger(raw.sentenceIndex)
         ) {
+          const sentenceIndex = raw.sentenceIndex as number;
+          const matchingProgress =
+            lastCloudProgress?.sessionId === snapshot.id &&
+            lastCloudProgress.generationEpoch === snapshot.generationEpoch &&
+            lastCloudProgress.sentenceIndex === sentenceIndex
+              ? lastCloudProgress
+              : null;
+          emitDebug(
+            "offscreen",
+            "audio.progress.ended",
+            {
+              sentenceIndex,
+              lastMediaTimeMs: matchingProgress?.mediaTimeMs ?? null,
+              wallSinceProgressMs: matchingProgress
+                ? Math.max(0, Date.now() - matchingProgress.receivedAt)
+                : null,
+              generationEpoch: snapshot.generationEpoch,
+              session: snapshot.id.slice(-8),
+            },
+            sessionTargets.get(snapshot.id),
+          );
           event = {
             type: "ended",
-            sentenceIndex: raw.sentenceIndex as number,
+            sentenceIndex,
           };
         } else if (
           raw.type === "error" &&
@@ -1425,6 +1672,7 @@ export default defineBackground(() => {
                   )
                 : null;
             })(),
+            ...(DEBUG_MODE ? { debugLog: debug.format() } : {}),
           });
         })();
         return true;
@@ -1461,35 +1709,50 @@ export default defineBackground(() => {
         isRegion(message.region)
       ) {
         void (async () => {
+          const region = message.region as ElevenLabsRegion;
+          const credential = message.credential as string;
+          const rememberOnDevice = message.rememberOnDevice as boolean;
+          recordDebug("background", "provider.connection.start", {
+            region,
+            credentialProvided: credential.trim().length > 0,
+            rememberOnDevice,
+          });
           try {
-            const region = message.region as ElevenLabsRegion;
             const origin = elevenLabsOriginPattern(region);
             const permitted = await chrome.permissions.contains({
               origins: [origin],
+            });
+            recordDebug("background", "provider.permission.check", {
+              region,
+              granted: permitted,
             });
             if (!permitted) {
               sendResponse({
                 ok: false,
                 message: localizedMessage("optionsAllowSelectedRegion"),
+                ...(DEBUG_MODE ? { debugLog: debug.format() } : {}),
               });
               return;
             }
             const providerMetadata = await metadataClient.validateAndLoad(
-              message.credential as string,
+              credential,
               region,
             );
-            await credentials.save(
-              message.credential as string,
-              message.rememberOnDevice as boolean,
-            );
+            await credentials.save(credential, rememberOnDevice);
             await chrome.storage.local.set({
               [PROVIDER_METADATA_KEY]: { ...providerMetadata, region },
             });
             const connection = await credentials.describe();
+            recordDebug("background", "provider.connection.succeeded", {
+              region,
+              voiceCount: providerMetadata.voices.length,
+              modelCount: providerMetadata.models.length,
+            });
             sendResponse({
               ok: true,
               connection,
               metadata: providerMetadata,
+              ...(DEBUG_MODE ? { debugLog: debug.format() } : {}),
             });
             const pending = (
               await chrome.storage.session.get(PENDING_CLOUD_KEY)
@@ -1507,6 +1770,11 @@ export default defineBackground(() => {
               isRecord(error) && typeof error.code === "string"
                 ? error.code
                 : null;
+            recordDebug("background", "provider.connection.failed", {
+              region,
+              errorCode,
+              error: summarizeDebugError(error),
+            });
             const messageKey =
               errorCode === "AUTH_FAILED"
                 ? "optionsProviderAuthFailed"
@@ -1518,6 +1786,7 @@ export default defineBackground(() => {
             sendResponse({
               ok: false,
               message: localizedMessage(messageKey),
+              ...(DEBUG_MODE ? { debugLog: debug.format() } : {}),
             });
           }
         })();

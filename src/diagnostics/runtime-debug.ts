@@ -1,6 +1,7 @@
 export const DEBUG_MODE =
   import.meta.env.DEV || import.meta.env.WXT_DEBUG_MODE === "true";
-export const MAX_RUNTIME_DEBUG_ENTRIES = 160;
+export const MAX_RUNTIME_DEBUG_ENTRIES = 320;
+export const EMPTY_RUNTIME_DEBUG_LOG = `Speak-O DEBUG_MODE=true\nentries=0/${MAX_RUNTIME_DEBUG_ENTRIES}\n<no events>`;
 
 export type RuntimeDebugScope = "content" | "background" | "tts" | "offscreen";
 

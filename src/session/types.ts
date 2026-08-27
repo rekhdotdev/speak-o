@@ -76,6 +76,8 @@ export interface ReadingSessionDescriptor {
   currentSentenceIndex: number;
   mediaTimeMs: number;
   status: ReadingSessionStatus;
+  submittedCharacters: number;
+  submittedSentenceIndices: number[];
 }
 
 export interface SpeechAlignment {

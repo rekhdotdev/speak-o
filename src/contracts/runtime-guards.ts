@@ -33,6 +33,38 @@ export function isCommandContext(value: unknown): value is CommandContext {
   );
 }
 
+function isSessionCommandMessage(value: Record<string, unknown>): boolean {
+  if (!isCommandContext(value) || typeof value.command !== "string") {
+    return false;
+  }
+  switch (value.command) {
+    case "seek":
+      return (
+        Number.isSafeInteger(value.value) &&
+        (value.value as number) >= 0 &&
+        (value.value as number) <= 20_000
+      );
+    case "set-playback-speed":
+      return isPlaybackSpeed(value.value);
+    case "set-highlights":
+      return value.value === 0 || value.value === 1;
+    case "toggle":
+    case "play":
+    case "pause":
+    case "next":
+    case "previous":
+    case "retry":
+    case "continue-usage":
+    case "switch-to-browser":
+    case "continue-without-highlights":
+    case "close":
+    case "restart":
+      return value.value === undefined;
+    default:
+      return false;
+  }
+}
+
 function validMappingIds(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
@@ -124,6 +156,20 @@ export function isReadingSessionDescriptor(
     typeof value.mediaTimeMs === "number" &&
     Number.isFinite(value.mediaTimeMs) &&
     value.mediaTimeMs >= 0 &&
+    Number.isSafeInteger(value.submittedCharacters) &&
+    (value.submittedCharacters as number) >= 0 &&
+    (value.submittedCharacters as number) <= 500_000 &&
+    Array.isArray(value.submittedSentenceIndices) &&
+    value.submittedSentenceIndices.length <= 20_000 &&
+    value.submittedSentenceIndices.every(
+      (sentenceIndex, index) =>
+        Number.isSafeInteger(sentenceIndex) &&
+        (sentenceIndex as number) >= 0 &&
+        (sentenceIndex as number) < 20_000 &&
+        (index === 0 ||
+          (sentenceIndex as number) >
+            (value.submittedSentenceIndices as number[])[index - 1]!),
+    ) &&
     [
       "ready",
       "preparing",
@@ -250,6 +296,9 @@ export function isExtensionMessage(
     ],
   };
   if (allowedTypes[value.target]?.includes(value.type) !== true) return false;
+  if (value.target === "background" && value.type === "session.command") {
+    return isSessionCommandMessage(value);
+  }
   if (
     value.target === "background" &&
     (value.type === "settings.open" || value.type === "settings.changed")

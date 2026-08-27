@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEBUG_MODE } from "../diagnostics/runtime-debug";
+import {
+  DEBUG_MODE,
+  EMPTY_RUNTIME_DEBUG_LOG,
+} from "../diagnostics/runtime-debug";
 import { interfaceDirection, message, type MessageKey } from "../i18n";
 import type {
   ReadingSessionSnapshot,
@@ -139,7 +142,7 @@ function IconButton({
 
 export function ReaderApp({
   state,
-  debugLog = "Speak-O DEBUG_MODE=true\nentries=0/160\n<no events>",
+  debugLog = EMPTY_RUNTIME_DEBUG_LOG,
   onChooseMode,
   onCommand,
   onOpenSettings,

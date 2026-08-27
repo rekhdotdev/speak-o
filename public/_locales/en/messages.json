@@ -331,5 +331,23 @@
   },
   "optionsDiagnosticsCopied": {
     "message": "Redacted diagnostics copied. No Article text, key, audio, or URL was included."
+  },
+  "optionsDebugModeOn": {
+    "message": "Diagnostic build is on"
+  },
+  "optionsDebugLogLabel": {
+    "message": "Speak-O debug log"
+  },
+  "optionsCopyDebugLog": {
+    "message": "Copy debug log"
+  },
+  "optionsDebugCopied": {
+    "message": "Debug log copied."
+  },
+  "optionsDebugCopyFailed": {
+    "message": "Copy failed; select the log and copy it manually."
+  },
+  "optionsDebugPrivacy": {
+    "message": "Keys, Article text, audio, request headers, and full URLs are excluded."
   }
 }

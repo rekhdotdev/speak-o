@@ -10,6 +10,9 @@ let context: {
   generationEpoch: number;
   sentenceIndex: number;
 } | null = null;
+const MEDIA_PROGRESS_INTERVAL_MS = 50;
+let progressTimer: ReturnType<typeof setInterval> | null = null;
+let lastProgressMediaTimeMs: number | null = null;
 
 function sendAudioEvent(event: Record<string, unknown>): void {
   if (!context) return;
@@ -23,7 +26,27 @@ function sendAudioEvent(event: Record<string, unknown>): void {
   });
 }
 
+function stopProgressTimer(): void {
+  if (progressTimer !== null) clearInterval(progressTimer);
+  progressTimer = null;
+}
+
+function sampleMediaProgress(): void {
+  if (!audio) return;
+  const mediaTimeMs = Math.max(0, Math.round(audio.currentTime * 1_000));
+  if (mediaTimeMs === lastProgressMediaTimeMs) return;
+  lastProgressMediaTimeMs = mediaTimeMs;
+  sendAudioEvent({ type: "progress", mediaTimeMs });
+}
+
+function startProgressTimer(): void {
+  if (progressTimer !== null) return;
+  sampleMediaProgress();
+  progressTimer = setInterval(sampleMediaProgress, MEDIA_PROGRESS_INTERVAL_MS);
+}
+
 function stopAudio(): void {
+  stopProgressTimer();
   if (audio) {
     audio.pause();
     audio.removeAttribute("src");
@@ -33,6 +56,7 @@ function stopAudio(): void {
   audio = null;
   objectUrl = null;
   context = null;
+  lastProgressMediaTimeMs = null;
 }
 
 function decodeBase64(value: string): Uint8Array | null {
@@ -65,11 +89,19 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   }
   if (message.type === "audio.pause") {
     audio?.pause();
+    sampleMediaProgress();
+    stopProgressTimer();
     return;
   }
   if (message.type === "audio.resume") {
-    void audio
+    const resumedAudio = audio;
+    void resumedAudio
       ?.play()
+      .then(() => {
+        if (audio === resumedAudio && !resumedAudio.paused) {
+          startProgressTimer();
+        }
+      })
       .catch(() =>
         sendAudioEvent({ type: "error", errorCode: "AUDIO_RESUME_FAILED" }),
       );
@@ -111,26 +143,35 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   audio.preload = "auto";
   audio.playbackRate = message.playbackSpeed;
   audio.preservesPitch = true;
-  audio.addEventListener("timeupdate", () => {
-    if (audio)
-      sendAudioEvent({
-        type: "progress",
-        mediaTimeMs: Math.round(audio.currentTime * 1_000),
-      });
-  });
-  audio.addEventListener("ended", () => sendAudioEvent({ type: "ended" }), {
-    once: true,
-  });
+  audio.addEventListener("timeupdate", sampleMediaProgress);
+  audio.addEventListener(
+    "ended",
+    () => {
+      sampleMediaProgress();
+      stopProgressTimer();
+      sendAudioEvent({ type: "ended" });
+    },
+    { once: true },
+  );
   audio.addEventListener(
     "error",
-    () => sendAudioEvent({ type: "error", errorCode: "AUDIO_DECODE_FAILED" }),
+    () => {
+      stopProgressTimer();
+      sendAudioEvent({ type: "error", errorCode: "AUDIO_DECODE_FAILED" });
+    },
     { once: true },
   );
   const beginPlayback = () => {
     if (!audio) return;
     if (startAtMs > 0) audio.currentTime = startAtMs / 1_000;
-    void audio
+    const startedAudio = audio;
+    void startedAudio
       .play()
+      .then(() => {
+        if (audio === startedAudio && !startedAudio.paused) {
+          startProgressTimer();
+        }
+      })
       .catch(() =>
         sendAudioEvent({ type: "error", errorCode: "AUDIO_PLAY_FAILED" }),
       );

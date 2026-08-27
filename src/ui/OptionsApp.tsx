@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   buildRedactedDiagnostics,
   type RuntimeDiagnosticEvidence,
 } from "../diagnostics/diagnostics";
+import {
+  DEBUG_MODE,
+  EMPTY_RUNTIME_DEBUG_LOG,
+} from "../diagnostics/runtime-debug";
 import {
   DEFAULT_PREFERENCES,
   PLAYBACK_SPEEDS,
@@ -110,6 +114,11 @@ export function OptionsApp() {
   const [shortcuts, setShortcuts] = useState<ShortcutState[]>([]);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [debugLog, setDebugLog] = useState(EMPTY_RUNTIME_DEBUG_LOG);
+  const [debugCopyStatus, setDebugCopyStatus] = useState<
+    "idle" | "copied" | "failed"
+  >("idle");
+  const debugTextArea = useRef<HTMLTextAreaElement>(null);
   const [narrationLanguageDraft, setNarrationLanguageDraft] = useState("");
   const [usageGuardDraft, setUsageGuardDraft] = useState(
     String(DEFAULT_PREFERENCES.usageGuardCharacters ?? ""),
@@ -145,11 +154,13 @@ export function OptionsApp() {
           connection?: ConnectionState;
           preferences?: Preferences;
           metadata?: ElevenLabsMetadata;
+          debugLog?: string;
           sessionContext?: CommandContext | null;
         };
         if (state.connection) setConnection(state.connection);
         if (state.preferences) setPreferences(state.preferences);
         if (state.metadata) setMetadata(state.metadata);
+        if (typeof state.debugLog === "string") setDebugLog(state.debugLog);
         const context = state.sessionContext;
         if (
           !disposed &&
@@ -291,7 +302,11 @@ export function OptionsApp() {
         message?: string;
         connection?: ConnectionState;
         metadata?: ElevenLabsMetadata;
+        debugLog?: string;
       };
+      if (typeof response.debugLog === "string") {
+        setDebugLog(response.debugLog);
+      }
       if (!response.ok) {
         await chrome.permissions.remove({ origins: [originPattern] });
         setStatus(response.message ?? message("optionsConnectionFailed"));
@@ -351,6 +366,23 @@ export function OptionsApp() {
     });
     await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2));
     setStatus(message("optionsDiagnosticsCopied"));
+  };
+
+  const copyDebugLog = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(debugLog);
+      } else {
+        debugTextArea.current?.select();
+        if (!document.execCommand("copy")) throw new Error("Copy failed");
+      }
+      setDebugCopyStatus("copied");
+      setStatus(message("optionsDebugCopied"));
+    } catch {
+      debugTextArea.current?.select();
+      setDebugCopyStatus("failed");
+      setStatus(message("optionsDebugCopyFailed"));
+    }
   };
 
   return (
@@ -805,6 +837,37 @@ export function OptionsApp() {
           >
             {message("optionsCopyDiagnostics")}
           </button>
+          {DEBUG_MODE ? (
+            <div className="debug-log-card">
+              <div className="debug-log-heading">
+                <strong>{message("optionsDebugModeOn")}</strong>
+                <small>{message("optionsDebugPrivacy")}</small>
+              </div>
+              <textarea
+                ref={debugTextArea}
+                aria-label={message("optionsDebugLogLabel")}
+                readOnly
+                spellCheck={false}
+                value={debugLog}
+              />
+              <div className="debug-log-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void copyDebugLog()}
+                >
+                  {message("optionsCopyDebugLog")}
+                </button>
+                <span role="status">
+                  {debugCopyStatus === "copied"
+                    ? message("optionsDebugCopied")
+                    : debugCopyStatus === "failed"
+                      ? message("optionsDebugCopyFailed")
+                      : message("optionsDebugPrivacy")}
+                </span>
+              </div>
+            </div>
+          ) : null}
         </Section>
 
         <footer>

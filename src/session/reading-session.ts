@@ -38,6 +38,8 @@ interface ActiveSession {
   detectedNarrationLanguage: string;
   providerRegion: import("../storage/preferences").Preferences["region"];
   requestedSentenceIndices: Set<number>;
+  submittedSentenceIndices: Set<number>;
+  receivedSentenceIndices: Set<number>;
   bufferedAudio: Map<number, BufferedAudio>;
   lastGeneration: LastGeneration | null;
   retryCount: number;
@@ -71,6 +73,10 @@ function progressPercent(current: number, total: number): number {
 function base64ByteLength(value: string): number {
   const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
   return Math.max(0, Math.floor((value.length * 3) / 4) - padding);
+}
+
+function assertNeverCommand(_command: never): never {
+  throw new Error("Unsupported Reading Session command.");
 }
 
 function remainingSeconds(
@@ -193,6 +199,8 @@ export class ReadingSessionController {
         return this.onAudioEvent(command.event);
       case "stop":
         return this.stop();
+      default:
+        return assertNeverCommand(command);
     }
   }
 
@@ -247,7 +255,7 @@ export class ReadingSessionController {
       dock: preferences.dock,
       minimized: false,
       expanded: false,
-      submittedCharacters: 0,
+      submittedCharacters: descriptor.submittedCharacters,
       usageGuardCharacters: preferences.usageGuardCharacters,
       notice: "sessionNoticeRestoredPaused",
       errorCode: null,
@@ -255,6 +263,10 @@ export class ReadingSessionController {
     };
     const bufferedAudio = new Map<number, BufferedAudio>();
     const requestedSentenceIndices = new Set<number>();
+    const submittedSentenceIndices = new Set<number>(
+      descriptor.submittedSentenceIndices,
+    );
+    const receivedSentenceIndices = new Set<number>();
     for (const entry of command.bufferedAudio ?? []) {
       if (
         Number.isSafeInteger(entry.sentenceIndex) &&
@@ -267,6 +279,8 @@ export class ReadingSessionController {
           alignment: entry.alignment,
         });
         requestedSentenceIndices.add(entry.sentenceIndex);
+        submittedSentenceIndices.add(entry.sentenceIndex);
+        receivedSentenceIndices.add(entry.sentenceIndex);
       }
     }
     this.active = {
@@ -279,6 +293,8 @@ export class ReadingSessionController {
       detectedNarrationLanguage: command.article.narrationLanguage,
       providerRegion: preferences.region,
       requestedSentenceIndices,
+      submittedSentenceIndices,
+      receivedSentenceIndices,
       bufferedAudio,
       lastGeneration: null,
       retryCount: 0,
@@ -357,6 +373,8 @@ export class ReadingSessionController {
       detectedNarrationLanguage: command.article.narrationLanguage,
       providerRegion: command.preferences.region,
       requestedSentenceIndices: new Set(),
+      submittedSentenceIndices: new Set(),
+      receivedSentenceIndices: new Set(),
       bufferedAudio: new Map(),
       lastGeneration: null,
       retryCount: 0,
@@ -537,6 +555,9 @@ export class ReadingSessionController {
     candidates.forEach((sentence) =>
       active.requestedSentenceIndices.add(sentence.index),
     );
+    candidates.forEach((sentence) =>
+      active.submittedSentenceIndices.add(sentence.index),
+    );
     active.snapshot = {
       ...active.snapshot,
       status: "preparing",
@@ -576,6 +597,18 @@ export class ReadingSessionController {
     if (active.snapshot.mode !== "cloud") return this.transition([]);
 
     if (event.type === "failure") {
+      if (active.lastGeneration) {
+        const unfinishedSentences = active.lastGeneration.sentences.filter(
+          (sentence) => !active.receivedSentenceIndices.has(sentence.index),
+        );
+        if (unfinishedSentences.length === 0) {
+          return this.transition([]);
+        }
+        active.lastGeneration = {
+          ...active.lastGeneration,
+          sentences: unfinishedSentences,
+        };
+      }
       const canRetryAutomatically = !event.acknowledged && !event.receivedAudio;
       if (canRetryAutomatically && active.lastGeneration) {
         active.retryCount += 1;
@@ -616,6 +649,7 @@ export class ReadingSessionController {
       audioBase64: event.audioBase64,
       alignment: event.alignment,
     });
+    active.receivedSentenceIndices.add(event.sentenceIndex);
     active.snapshot = {
       ...active.snapshot,
       status:
@@ -780,6 +814,9 @@ export class ReadingSessionController {
       return this.transition([]);
     }
     active.retryCount += 1;
+    for (const sentence of active.lastGeneration.sentences) {
+      active.requestedSentenceIndices.add(sentence.index);
+    }
     active.snapshot = {
       ...active.snapshot,
       status: "preparing",
@@ -890,6 +927,33 @@ export class ReadingSessionController {
             }),
           );
         } else {
+          const sentence = active.article.sentences[destination];
+          const voiceId = active.snapshot.voiceId;
+          if (
+            active.submittedSentenceIndices.has(destination) &&
+            sentence &&
+            voiceId
+          ) {
+            active.lastGeneration = {
+              sentences: [{ index: destination, text: sentence.text }],
+              language: active.snapshot.narrationLanguage,
+              voiceId,
+              modelId: active.snapshot.modelId,
+              region: active.providerRegion,
+            };
+            active.snapshot = {
+              ...active.snapshot,
+              status: "provider-issue",
+              notice: "sessionNoticeRetryMayDuplicate",
+              errorCode: "EVICTED_AUDIO_REGENERATION",
+              retryRequiresConfirmation: true,
+            };
+            effects.push(
+              this.renderEffect(active.snapshot),
+              this.saveDescriptorEffect(active.snapshot),
+            );
+            return this.transition(effects);
+          }
           active.snapshot = { ...active.snapshot, status: "paused" };
           const preparing = this.playCloud();
           return {
@@ -1135,7 +1199,10 @@ export class ReadingSessionController {
           .map((sentence, offset) => ({
             index: start + offset,
             text: sentence.text,
-          }));
+          }))
+          .filter(
+            (sentence) => !active.receivedSentenceIndices.has(sentence.index),
+          );
         sentences.forEach((sentence) =>
           active.requestedSentenceIndices.add(sentence.index),
         );
@@ -1425,6 +1492,7 @@ export class ReadingSessionController {
   private saveDescriptorEffect(
     snapshot: ReadingSessionSnapshot,
   ): ReadingSessionEffect {
+    const active = this.requireActive();
     return this.contextEffect(snapshot, {
       type: "storage.save-descriptor",
       descriptor: {
@@ -1437,6 +1505,10 @@ export class ReadingSessionController {
         currentSentenceIndex: snapshot.currentSentenceIndex,
         mediaTimeMs: snapshot.currentMediaTimeMs,
         status: snapshot.status,
+        submittedCharacters: snapshot.submittedCharacters,
+        submittedSentenceIndices: [...active.submittedSentenceIndices].sort(
+          (left, right) => left - right,
+        ),
       },
     });
   }
