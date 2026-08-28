@@ -1,3 +1,12 @@
+import {
+  isSpeechProviderId,
+  type CloudProviderId,
+  type ElevenLabsRegion,
+  type SpeechProviderId,
+} from "../provider/types";
+
+export type { ElevenLabsRegion, SpeechProviderId } from "../provider/types";
+
 export const PLAYBACK_SPEEDS = [
   0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3,
 ] as const;
@@ -6,20 +15,29 @@ export type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
 export type Theme = "system" | "light" | "dark";
 export type Dock = "bottom" | "top";
 export type VoiceMode = "browser" | "cloud";
-export type ElevenLabsRegion = "global" | "us" | "eu" | "india" | "singapore";
+
+export interface ElevenLabsPreferences {
+  voiceByLanguage: Record<string, string>;
+  region: ElevenLabsRegion;
+  modelId: string;
+}
+
+export interface SpeechifyPreferences {
+  voiceByLanguage: Record<string, string>;
+  modelId: string;
+}
 
 export interface Preferences {
   playbackSpeed: PlaybackSpeed;
-  voiceByLanguage: Record<string, string>;
   browserVoiceByLanguage: Record<string, string>;
   narrationLanguageOverride: string | null;
   highlightsEnabled: boolean;
   followEnabled: boolean;
   theme: Theme;
   dock: Dock;
-  defaultVoiceMode: VoiceMode;
-  region: ElevenLabsRegion;
-  modelId: string;
+  defaultProvider: SpeechProviderId;
+  elevenLabs: ElevenLabsPreferences;
+  speechify: SpeechifyPreferences;
   usageGuardCharacters: number | null;
 }
 
@@ -32,16 +50,22 @@ export interface ExtensionStorageArea {
 
 export const DEFAULT_PREFERENCES: Preferences = {
   playbackSpeed: 1,
-  voiceByLanguage: {},
   browserVoiceByLanguage: {},
   narrationLanguageOverride: null,
   highlightsEnabled: true,
   followEnabled: true,
   theme: "system",
   dock: "bottom",
-  defaultVoiceMode: "browser",
-  region: "global",
-  modelId: "eleven_multilingual_v2",
+  defaultProvider: "browser",
+  elevenLabs: {
+    voiceByLanguage: {},
+    region: "global",
+    modelId: "eleven_multilingual_v2",
+  },
+  speechify: {
+    voiceByLanguage: {},
+    modelId: "simba-3.0",
+  },
   usageGuardCharacters: 25_000,
 };
 
@@ -93,6 +117,77 @@ function sanitizeLanguage(value: unknown): string | null {
     : null;
 }
 
+function sanitizeModelId(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.length > 0 && value.length <= 160
+    ? value
+    : fallback;
+}
+
+function isModelId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 160;
+}
+
+function sanitizeElevenLabs(
+  candidate: Record<string, unknown>,
+): ElevenLabsPreferences {
+  return {
+    voiceByLanguage: sanitizeVoices(candidate.voiceByLanguage),
+    region: oneOf(
+      candidate.region,
+      ["global", "us", "eu", "india", "singapore"],
+      DEFAULT_PREFERENCES.elevenLabs.region,
+    ),
+    modelId: sanitizeModelId(
+      candidate.modelId,
+      DEFAULT_PREFERENCES.elevenLabs.modelId,
+    ),
+  };
+}
+
+function sanitizeSpeechify(
+  candidate: Record<string, unknown>,
+): SpeechifyPreferences {
+  return {
+    voiceByLanguage: sanitizeVoices(candidate.voiceByLanguage),
+    modelId: sanitizeModelId(
+      candidate.modelId,
+      DEFAULT_PREFERENCES.speechify.modelId,
+    ),
+  };
+}
+
+function isElevenLabsPreferences(
+  value: unknown,
+): value is ElevenLabsPreferences {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length === 3 &&
+    isVoiceMap(value.voiceByLanguage) &&
+    ["global", "us", "eu", "india", "singapore"].includes(
+      String(value.region),
+    ) &&
+    isModelId(value.modelId)
+  );
+}
+
+function isSpeechifyPreferences(value: unknown): value is SpeechifyPreferences {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length === 2 &&
+    isVoiceMap(value.voiceByLanguage) &&
+    isModelId(value.modelId)
+  );
+}
+
+export function providerPreferences(
+  preferences: Preferences,
+  provider: CloudProviderId,
+): ElevenLabsPreferences | SpeechifyPreferences {
+  return provider === "elevenlabs"
+    ? preferences.elevenLabs
+    : preferences.speechify;
+}
+
 export function sanitizePreferences(value: unknown): Preferences {
   const candidate = isRecord(value) ? value : {};
   const playbackSpeed = PLAYBACK_SPEEDS.includes(
@@ -108,10 +203,25 @@ export function sanitizePreferences(value: unknown): Preferences {
           (candidate.usageGuardCharacters as number) <= 500_000
         ? (candidate.usageGuardCharacters as number)
         : DEFAULT_PREFERENCES.usageGuardCharacters;
+  const legacyElevenLabs = {
+    voiceByLanguage: candidate.voiceByLanguage,
+    region: candidate.region,
+    modelId: candidate.modelId,
+  };
+  const elevenLabsCandidate = isRecord(candidate.elevenLabs)
+    ? candidate.elevenLabs
+    : legacyElevenLabs;
+  const speechifyCandidate = isRecord(candidate.speechify)
+    ? candidate.speechify
+    : {};
+  const defaultProvider = isSpeechProviderId(candidate.defaultProvider)
+    ? candidate.defaultProvider
+    : candidate.defaultVoiceMode === "cloud"
+      ? "elevenlabs"
+      : DEFAULT_PREFERENCES.defaultProvider;
 
   return {
     playbackSpeed,
-    voiceByLanguage: sanitizeVoices(candidate.voiceByLanguage),
     browserVoiceByLanguage: sanitizeVoices(candidate.browserVoiceByLanguage),
     narrationLanguageOverride: sanitizeLanguage(
       candidate.narrationLanguageOverride,
@@ -130,22 +240,9 @@ export function sanitizePreferences(value: unknown): Preferences {
       DEFAULT_PREFERENCES.theme,
     ),
     dock: oneOf(candidate.dock, ["bottom", "top"], DEFAULT_PREFERENCES.dock),
-    defaultVoiceMode: oneOf(
-      candidate.defaultVoiceMode,
-      ["browser", "cloud"],
-      DEFAULT_PREFERENCES.defaultVoiceMode,
-    ),
-    region: oneOf(
-      candidate.region,
-      ["global", "us", "eu", "india", "singapore"],
-      DEFAULT_PREFERENCES.region,
-    ),
-    modelId:
-      typeof candidate.modelId === "string" &&
-      candidate.modelId.length > 0 &&
-      candidate.modelId.length <= 160
-        ? candidate.modelId
-        : DEFAULT_PREFERENCES.modelId,
+    defaultProvider,
+    elevenLabs: sanitizeElevenLabs(elevenLabsCandidate),
+    speechify: sanitizeSpeechify(speechifyCandidate),
     usageGuardCharacters,
   };
 }
@@ -165,7 +262,6 @@ export function isPreferencePatch(value: unknown): value is PreferencePatch {
     switch (key) {
       case "playbackSpeed":
         return PLAYBACK_SPEEDS.includes(candidate as PlaybackSpeed);
-      case "voiceByLanguage":
       case "browserVoiceByLanguage":
         return isVoiceMap(candidate);
       case "narrationLanguageOverride":
@@ -177,18 +273,12 @@ export function isPreferencePatch(value: unknown): value is PreferencePatch {
         return ["system", "light", "dark"].includes(String(candidate));
       case "dock":
         return ["bottom", "top"].includes(String(candidate));
-      case "defaultVoiceMode":
-        return ["browser", "cloud"].includes(String(candidate));
-      case "region":
-        return ["global", "us", "eu", "india", "singapore"].includes(
-          String(candidate),
-        );
-      case "modelId":
-        return (
-          typeof candidate === "string" &&
-          candidate.length > 0 &&
-          candidate.length <= 160
-        );
+      case "defaultProvider":
+        return isSpeechProviderId(candidate);
+      case "elevenLabs":
+        return isElevenLabsPreferences(candidate);
+      case "speechify":
+        return isSpeechifyPreferences(candidate);
       case "usageGuardCharacters":
         return (
           candidate === null ||

@@ -17,10 +17,14 @@ import {
   type PreferencePatch,
   type Preferences,
 } from "../storage/preferences";
+import { elevenLabsOriginPattern } from "../provider/elevenlabs";
+import { SPEECHIFY_ORIGIN_PATTERN } from "../provider/speechify";
 import {
-  elevenLabsOriginPattern,
-  type ElevenLabsMetadata,
-} from "../provider/elevenlabs";
+  type CloudProviderId,
+  type ProviderMetadata,
+  type ProviderVoice,
+  type SpeechProviderId,
+} from "../provider/types";
 import type { CommandContext } from "../session/types";
 import { interfaceDirection, message } from "../i18n";
 
@@ -41,6 +45,19 @@ const emptyConnection: ConnectionState = {
   remembered: false,
   maskedSuffix: null,
 };
+
+const emptyConnections: Record<CloudProviderId, ConnectionState> = {
+  elevenlabs: emptyConnection,
+  speechify: emptyConnection,
+};
+
+const emptyMetadata: Record<CloudProviderId, ProviderMetadata> = {
+  elevenlabs: { voices: [], models: [] },
+  speechify: { voices: [], models: [] },
+};
+
+const providerName = (provider: CloudProviderId) =>
+  provider === "elevenlabs" ? "ElevenLabs" : "Speechify";
 
 function Section({
   id,
@@ -100,20 +117,36 @@ function Toggle({
 export function OptionsApp() {
   const [preferences, setPreferences] =
     useState<Preferences>(DEFAULT_PREFERENCES);
-  const [connection, setConnection] =
-    useState<ConnectionState>(emptyConnection);
-  const [metadata, setMetadata] = useState<ElevenLabsMetadata>({
-    voices: [],
-    models: [],
+  const [connections, setConnections] =
+    useState<Record<CloudProviderId, ConnectionState>>(emptyConnections);
+  const [metadata, setMetadata] =
+    useState<Record<CloudProviderId, ProviderMetadata>>(emptyMetadata);
+  const [credentials, setCredentials] = useState<
+    Record<CloudProviderId, string>
+  >({
+    elevenlabs: "",
+    speechify: "",
   });
-  const [credential, setCredential] = useState("");
-  const [remember, setRemember] = useState(false);
-  const [reveal, setReveal] = useState(false);
-  const [voiceSearch, setVoiceSearch] = useState("");
+  const [remember, setRemember] = useState<Record<CloudProviderId, boolean>>({
+    elevenlabs: false,
+    speechify: false,
+  });
+  const [revealed, setRevealed] = useState<Record<CloudProviderId, boolean>>({
+    elevenlabs: false,
+    speechify: false,
+  });
+  const [voiceSearch, setVoiceSearch] = useState<
+    Record<CloudProviderId, string>
+  >({
+    elevenlabs: "",
+    speechify: "",
+  });
   const [browserVoices, setBrowserVoices] = useState<chrome.tts.TtsVoice[]>([]);
   const [shortcuts, setShortcuts] = useState<ShortcutState[]>([]);
   const [status, setStatus] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busyProvider, setBusyProvider] = useState<CloudProviderId | null>(
+    null,
+  );
   const [debugLog, setDebugLog] = useState(EMPTY_RUNTIME_DEBUG_LOG);
   const [debugCopyStatus, setDebugCopyStatus] = useState<
     "idle" | "copied" | "failed"
@@ -151,15 +184,33 @@ export function OptionsApp() {
       .then((response: unknown) => {
         if (typeof response !== "object" || response === null) return;
         const state = response as {
+          connections?: Record<CloudProviderId, ConnectionState>;
           connection?: ConnectionState;
           preferences?: Preferences;
-          metadata?: ElevenLabsMetadata;
+          metadata?:
+            ProviderMetadata | Record<CloudProviderId, ProviderMetadata>;
           debugLog?: string;
           sessionContext?: CommandContext | null;
         };
-        if (state.connection) setConnection(state.connection);
+        if (state.connections) {
+          setConnections(state.connections);
+        } else if (state.connection) {
+          setConnections({
+            elevenlabs: state.connection,
+            speechify: emptyConnection,
+          });
+        }
         if (state.preferences) setPreferences(state.preferences);
-        if (state.metadata) setMetadata(state.metadata);
+        if (state.metadata) {
+          if ("elevenlabs" in state.metadata) {
+            setMetadata(state.metadata);
+          } else {
+            setMetadata({
+              elevenlabs: state.metadata,
+              speechify: { voices: [], models: [] },
+            });
+          }
+        }
         if (typeof state.debugLog === "string") setDebugLog(state.debugLog);
         const context = state.sessionContext;
         if (
@@ -219,9 +270,15 @@ export function OptionsApp() {
         new Set([
           interfaceLanguage,
           ...browserVoices.flatMap((voice) => (voice.lang ? [voice.lang] : [])),
+          ...Object.values(metadata).flatMap((providerMetadata) => [
+            ...providerMetadata.models.flatMap((model) => model.languages),
+            ...providerMetadata.voices.flatMap((voice) =>
+              voice.labels.locale ? [voice.labels.locale] : [],
+            ),
+          ]),
         ]),
       ).sort((left, right) => left.localeCompare(right)),
-    [browserVoices, interfaceLanguage],
+    [browserVoices, interfaceLanguage, metadata],
   );
   const compatibleBrowserVoices = browserVoices.filter((voice) => {
     if (!voice.lang) return true;
@@ -274,14 +331,18 @@ export function OptionsApp() {
     void savePreferences(patch);
   };
 
-  const connect = async () => {
-    if (credential.trim().length < 8) {
+  const connect = async (provider: CloudProviderId) => {
+    const credential = credentials[provider].trim();
+    if (credential.length < 8) {
       setStatus(message("optionsInvalidCredential"));
       return;
     }
-    setBusy(true);
+    setBusyProvider(provider);
     setStatus(message("optionsRequestingAccess"));
-    const originPattern = elevenLabsOriginPattern(preferences.region);
+    const originPattern =
+      provider === "elevenlabs"
+        ? elevenLabsOriginPattern(preferences.elevenLabs.region)
+        : SPEECHIFY_ORIGIN_PATTERN;
     try {
       const granted = await chrome.permissions.request({
         origins: [originPattern],
@@ -294,14 +355,15 @@ export function OptionsApp() {
         version: 1,
         target: "background",
         type: "provider.connect",
-        credential: credential.trim(),
-        rememberOnDevice: remember,
-        region: preferences.region,
+        provider,
+        credential,
+        rememberOnDevice: remember[provider],
+        region: preferences.elevenLabs.region,
       })) as {
         ok: boolean;
         message?: string;
         connection?: ConnectionState;
-        metadata?: ElevenLabsMetadata;
+        metadata?: ProviderMetadata;
         debugLog?: string;
       };
       if (typeof response.debugLog === "string") {
@@ -312,41 +374,73 @@ export function OptionsApp() {
         setStatus(response.message ?? message("optionsConnectionFailed"));
         return;
       }
-      setConnection(response.connection ?? emptyConnection);
-      setMetadata(response.metadata ?? { voices: [], models: [] });
+      setConnections((current) => ({
+        ...current,
+        [provider]: response.connection ?? emptyConnection,
+      }));
+      setMetadata((current) => ({
+        ...current,
+        [provider]: response.metadata ?? { voices: [], models: [] },
+      }));
       setStatus(message("optionsConnectionSucceeded"));
     } finally {
-      setCredential("");
-      setReveal(false);
-      setBusy(false);
+      setCredentials((current) => ({ ...current, [provider]: "" }));
+      setRevealed((current) => ({ ...current, [provider]: false }));
+      setBusyProvider(null);
     }
   };
 
-  const disconnect = async () => {
-    setBusy(true);
+  const disconnect = async (provider: CloudProviderId) => {
+    setBusyProvider(provider);
     const response = (await chrome.runtime.sendMessage({
       version: 1,
       target: "background",
       type: "provider.disconnect",
-      region: preferences.region,
+      provider,
+      region: preferences.elevenLabs.region,
     })) as { ok: boolean };
     if (response.ok) {
-      setConnection(emptyConnection);
-      setMetadata({ voices: [], models: [] });
+      setConnections((current) => ({
+        ...current,
+        [provider]: emptyConnection,
+      }));
+      setMetadata((current) => ({
+        ...current,
+        [provider]: { voices: [], models: [] },
+      }));
       setStatus(message("optionsDisconnected"));
     }
-    setBusy(false);
+    setBusyProvider(null);
   };
 
-  const visibleVoices = useMemo(() => {
-    const query = voiceSearch.trim().toLocaleLowerCase();
-    if (!query) return metadata.voices;
-    return metadata.voices.filter((voice) =>
-      `${voice.name} ${Object.values(voice.labels).join(" ")}`
-        .toLocaleLowerCase()
-        .includes(query),
-    );
-  }, [metadata.voices, voiceSearch]);
+  const visibleVoices = (provider: CloudProviderId): ProviderVoice[] => {
+    const query = voiceSearch[provider].trim().toLocaleLowerCase();
+    const selectedModel =
+      preferences[provider === "elevenlabs" ? "elevenLabs" : "speechify"]
+        .modelId;
+    return metadata[provider].voices.filter((voice) => {
+      const voiceModels = Array.isArray(voice.models) ? voice.models : [];
+      const modelCompatible =
+        voiceModels.length === 0 ||
+        voiceModels.some(
+          (model) =>
+            model.id === selectedModel &&
+            (model.languages.length === 0 ||
+              model.languages.some((language) =>
+                language
+                  .toLowerCase()
+                  .startsWith(baseNarrationLanguage.toLowerCase()),
+              )),
+        );
+      return (
+        modelCompatible &&
+        (!query ||
+          `${voice.name} ${Object.values(voice.labels).join(" ")}`
+            .toLocaleLowerCase()
+            .includes(query))
+      );
+    });
+  };
 
   const copyDiagnostics = async () => {
     const response = (await chrome.runtime.sendMessage({
@@ -421,77 +515,125 @@ export function OptionsApp() {
           title={message("optionsSpeech")}
           description={message("optionsSpeechDescription")}
         >
-          <div className="provider-card">
-            <div className="provider-heading">
-              <div>
-                <strong>{message("optionsElevenLabsCloudVoice")}</strong>
-                <small>{message("optionsDirectByok")}</small>
-              </div>
-              <span
-                className={`connection-badge ${connection.connected ? "connected" : ""}`}
+          {(["elevenlabs", "speechify"] as const).map((provider) => {
+            const connection = connections[provider];
+            const busy = busyProvider !== null;
+            return (
+              <div
+                className="provider-card"
+                data-provider={provider}
+                key={provider}
               >
-                {connection.connected
-                  ? message("optionsConnected", connection.maskedSuffix ?? "")
-                  : message("optionsNotConnected")}
-              </span>
-            </div>
-            {connection.connected ? (
-              <button
-                className="danger-button"
-                disabled={busy}
-                type="button"
-                onClick={disconnect}
-              >
-                {message("optionsDisconnectElevenLabs")}
-              </button>
-            ) : (
-              <div className="credential-form">
-                <label>
-                  <span>{message("optionsProviderCredential")}</span>
-                  <div className="credential-input">
-                    <input
-                      autoComplete="off"
-                      type={reveal ? "text" : "password"}
-                      value={credential}
-                      placeholder={message("optionsCredentialPlaceholder")}
-                      onChange={(event) =>
-                        setCredential(event.currentTarget.value)
-                      }
-                    />
+                <div className="provider-heading">
+                  <div>
+                    <strong>
+                      {message(
+                        provider === "elevenlabs"
+                          ? "optionsElevenLabsCloudVoice"
+                          : "optionsSpeechifyCloudVoice",
+                      )}
+                    </strong>
+                    <small>{message("optionsDirectByok")}</small>
+                  </div>
+                  <span
+                    className={`connection-badge ${connection.connected ? "connected" : ""}`}
+                  >
+                    {connection.connected
+                      ? message(
+                          "optionsConnected",
+                          connection.maskedSuffix ?? "",
+                        )
+                      : message("optionsNotConnected")}
+                  </span>
+                </div>
+                {connection.connected ? (
+                  <button
+                    className="danger-button"
+                    disabled={busy}
+                    type="button"
+                    onClick={() => void disconnect(provider)}
+                  >
+                    {message(
+                      provider === "elevenlabs"
+                        ? "optionsDisconnectElevenLabs"
+                        : "optionsDisconnectSpeechify",
+                    )}
+                  </button>
+                ) : (
+                  <div className="credential-form">
+                    <label>
+                      <span>{message("optionsProviderCredential")}</span>
+                      <div className="credential-input">
+                        <input
+                          autoComplete="off"
+                          type={revealed[provider] ? "text" : "password"}
+                          value={credentials[provider]}
+                          placeholder={message(
+                            provider === "elevenlabs"
+                              ? "optionsCredentialPlaceholder"
+                              : "optionsSpeechifyCredentialPlaceholder",
+                          )}
+                          onChange={(event) => {
+                            const value = event.currentTarget.value;
+                            setCredentials((current) => ({
+                              ...current,
+                              [provider]: value,
+                            }));
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRevealed((current) => ({
+                              ...current,
+                              [provider]: !current[provider],
+                            }))
+                          }
+                        >
+                          {message(
+                            revealed[provider]
+                              ? "optionsHide"
+                              : "optionsReveal",
+                          )}
+                        </button>
+                      </div>
+                    </label>
+                    <label className="remember-row">
+                      <input
+                        type="checkbox"
+                        checked={remember[provider]}
+                        onChange={(event) => {
+                          const checked = event.currentTarget.checked;
+                          setRemember((current) => ({
+                            ...current,
+                            [provider]: checked,
+                          }));
+                        }}
+                      />
+                      <span>
+                        <strong>{message("optionsRememberDevice")}</strong>
+                        <small>{message("optionsRememberDescription")}</small>
+                      </span>
+                    </label>
                     <button
+                      className="primary-button"
+                      disabled={busy}
                       type="button"
-                      onClick={() => setReveal((value) => !value)}
+                      onClick={() => void connect(provider)}
                     >
-                      {message(reveal ? "optionsHide" : "optionsReveal")}
+                      {message(
+                        busyProvider === provider
+                          ? "optionsConnecting"
+                          : provider === "elevenlabs"
+                            ? "optionsConnectElevenLabs"
+                            : "optionsConnectSpeechify",
+                      )}
                     </button>
                   </div>
-                </label>
-                <label className="remember-row">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(event) =>
-                      setRemember(event.currentTarget.checked)
-                    }
-                  />
-                  <span>
-                    <strong>{message("optionsRememberDevice")}</strong>
-                    <small>{message("optionsRememberDescription")}</small>
-                  </span>
-                </label>
-                <button
-                  className="primary-button"
-                  disabled={busy}
-                  type="button"
-                  onClick={connect}
-                >
-                  {message(
-                    busy ? "optionsConnecting" : "optionsConnectElevenLabs",
-                  )}
-                </button>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })}
 
           <div className="setting-grid">
             <label className="field">
@@ -517,18 +659,19 @@ export function OptionsApp() {
               </datalist>
             </label>
             <label className="field">
-              <span>{message("optionsDefaultVoiceMode")}</span>
+              <span>{message("optionsDefaultProvider")}</span>
               <select
-                value={preferences.defaultVoiceMode}
+                value={preferences.defaultProvider}
                 onChange={(event) =>
                   void savePreferences({
-                    defaultVoiceMode: event.currentTarget
-                      .value as Preferences["defaultVoiceMode"],
+                    defaultProvider: event.currentTarget
+                      .value as SpeechProviderId,
                   })
                 }
               >
                 <option value="browser">{message("optionsChromeVoice")}</option>
-                <option value="cloud">{message("optionsCloudVoice")}</option>
+                <option value="elevenlabs">ElevenLabs</option>
+                <option value="speechify">Speechify</option>
               </select>
             </label>
             <label className="field">
@@ -590,10 +733,13 @@ export function OptionsApp() {
             <label className="field">
               <span>{message("optionsApiRegion")}</span>
               <select
-                value={preferences.region}
+                value={preferences.elevenLabs.region}
                 onChange={(event) =>
                   void savePreferences({
-                    region: event.currentTarget.value as ElevenLabsRegion,
+                    elevenLabs: {
+                      ...preferences.elevenLabs,
+                      region: event.currentTarget.value as ElevenLabsRegion,
+                    },
                   })
                 }
               >
@@ -606,97 +752,132 @@ export function OptionsApp() {
                 </option>
               </select>
             </label>
-            <label className="field">
-              <span>{message("optionsModel")}</span>
-              <select
-                value={preferences.modelId}
-                onChange={(event) =>
-                  void savePreferences({
-                    modelId: event.currentTarget.value,
-                  })
-                }
-              >
-                {metadata.models.length === 0 ? (
-                  <option value={preferences.modelId}>Multilingual v2</option>
-                ) : (
-                  metadata.models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
+            {(["elevenlabs", "speechify"] as const).map((provider) => {
+              const preferenceKey =
+                provider === "elevenlabs" ? "elevenLabs" : "speechify";
+              const providerPreferences = preferences[preferenceKey];
+              return (
+                <label className="field" key={provider}>
+                  <span>
+                    {providerName(provider)} {message("optionsModel")}
+                  </span>
+                  <select
+                    value={providerPreferences.modelId}
+                    onChange={(event) =>
+                      void savePreferences({
+                        [preferenceKey]: {
+                          ...providerPreferences,
+                          modelId: event.currentTarget.value,
+                        },
+                      })
+                    }
+                  >
+                    {metadata[provider].models.length === 0 ? (
+                      <option value={providerPreferences.modelId}>
+                        {providerPreferences.modelId}
+                      </option>
+                    ) : (
+                      metadata[provider].models.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+              );
+            })}
           </div>
 
-          {connection.connected ? (
-            <div className="voice-picker">
-              <label className="field">
-                <span>{message("optionsSearchVoices")}</span>
-                <input
-                  type="search"
-                  value={voiceSearch}
-                  placeholder={message("optionsVoiceSearchPlaceholder")}
-                  onChange={(event) =>
-                    setVoiceSearch(event.currentTarget.value)
-                  }
-                />
-              </label>
-              <div
-                className="voice-list"
-                role="list"
-                aria-label={message("optionsAvailableVoices")}
-              >
-                {visibleVoices.map((voice) => (
-                  <div className="voice-option" key={voice.id} role="listitem">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void savePreferences({
-                          voiceByLanguage: {
-                            ...preferences.voiceByLanguage,
-                            [narrationLanguage]: voice.id,
-                            [baseNarrationLanguage]: voice.id,
-                          },
-                        })
-                      }
+          {(["elevenlabs", "speechify"] as const).map((provider) => {
+            if (!connections[provider].connected) return null;
+            const preferenceKey =
+              provider === "elevenlabs" ? "elevenLabs" : "speechify";
+            const providerPreferences = preferences[preferenceKey];
+            return (
+              <div className="voice-picker" key={provider}>
+                <label className="field">
+                  <span>
+                    {message("optionsSearchVoices")} · {providerName(provider)}
+                  </span>
+                  <input
+                    type="search"
+                    value={voiceSearch[provider]}
+                    placeholder={message("optionsVoiceSearchPlaceholder")}
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      setVoiceSearch((current) => ({
+                        ...current,
+                        [provider]: value,
+                      }));
+                    }}
+                  />
+                </label>
+                <div
+                  className="voice-list"
+                  role="list"
+                  aria-label={`${providerName(provider)} voices`}
+                >
+                  {visibleVoices(provider).map((voice) => (
+                    <div
+                      className="voice-option"
+                      key={voice.id}
+                      role="listitem"
                     >
-                      <span dir="auto">
-                        <strong>{voice.name}</strong>
-                        <small>
-                          {Object.values(voice.labels).join(" · ") ||
-                            message("optionsElevenLabsVoice")}
-                        </small>
-                      </span>
-                      <span>
-                        {preferences.voiceByLanguage[narrationLanguage] ===
-                          voice.id ||
-                        preferences.voiceByLanguage[baseNarrationLanguage] ===
-                          voice.id
-                          ? message("optionsSelected")
-                          : message("optionsChoose")}
-                      </span>
-                    </button>
-                    {voice.previewUrl ? (
-                      <a
-                        href={voice.previewUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label={message(
-                          "optionsPreviewVoiceLabel",
-                          voice.name,
-                        )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void savePreferences({
+                            [preferenceKey]: {
+                              ...providerPreferences,
+                              voiceByLanguage: {
+                                ...providerPreferences.voiceByLanguage,
+                                [narrationLanguage]: voice.id,
+                                [baseNarrationLanguage]: voice.id,
+                              },
+                            },
+                          })
+                        }
                       >
-                        {message("optionsPreview")}
-                      </a>
-                    ) : (
-                      <small>{message("optionsPreviewUnavailable")}</small>
-                    )}
-                  </div>
-                ))}
+                        <span dir="auto">
+                          <strong>{voice.name}</strong>
+                          <small>
+                            {Object.values(voice.labels).join(" · ") ||
+                              `${providerName(provider)} Voice`}
+                          </small>
+                        </span>
+                        <span>
+                          {providerPreferences.voiceByLanguage[
+                            narrationLanguage
+                          ] === voice.id ||
+                          providerPreferences.voiceByLanguage[
+                            baseNarrationLanguage
+                          ] === voice.id
+                            ? message("optionsSelected")
+                            : message("optionsChoose")}
+                        </span>
+                      </button>
+                      {voice.previewUrl ? (
+                        <a
+                          href={voice.previewUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={message(
+                            "optionsPreviewVoiceLabel",
+                            voice.name,
+                          )}
+                        >
+                          {message("optionsPreview")}
+                        </a>
+                      ) : (
+                        <small>{message("optionsPreviewUnavailable")}</small>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : null}
+            );
+          })}
         </Section>
 
         <Section
@@ -827,6 +1008,14 @@ export function OptionsApp() {
                 rel="noreferrer"
               >
                 {message("optionsElevenLabsPrivacy")}
+              </a>
+              {" · "}
+              <a
+                href="https://speechify.com/privacy/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {message("optionsSpeechifyPrivacy")}
               </a>
             </p>
           </div>

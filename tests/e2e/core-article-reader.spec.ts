@@ -22,6 +22,7 @@ const sessionSnapshot = {
   title: "A calm synthetic Article",
   status: "playing",
   mode: "browser",
+  provider: "browser",
   currentSentenceIndex: 0,
   currentMediaTimeMs: 0,
   sentenceCount: 8,

@@ -34,6 +34,7 @@ const expectedOrigins = [
   "https://api.eu.residency.elevenlabs.io/*",
   "https://api.in.residency.elevenlabs.io/*",
   "https://api.sg.residency.elevenlabs.io/*",
+  "https://api.speechify.ai/*",
 ];
 const equalSet = (actual, expected) =>
   JSON.stringify([...(actual ?? [])].sort()) ===

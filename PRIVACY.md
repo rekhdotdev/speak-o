@@ -2,7 +2,7 @@
 
 Canonical source for the intended public page at `https://rekh.dev/speak-o/`.
 
-Last updated: 24 August 2026.
+Last updated: 29 August 2026.
 
 Speak-O is an accountless, open-source Chrome Article Reader published by Rekh. Rekh does not operate a Speak-O speech backend, account service, analytics service, telemetry pipeline, crash reporter, or remote diagnostics service.
 
@@ -18,17 +18,21 @@ Speak-O sends text to Chrome's `tts` API and makes no Speech Provider request of
 
 Only source text inside the bounded Generation Window is sent by the extension directly to the ElevenLabs API Region selected by the user, using the user's own Provider Credential. Rekh is not an intermediary. ElevenLabs controls its own processing, retention, billing, and policy. See [ElevenLabs privacy material](https://elevenlabs.io/privacy).
 
+## Speechify Cloud Voice Mode
+
+Only source text inside the bounded Generation Window is sent by the extension directly to Speechify using the user's own Provider Credential. Rekh is not an intermediary. Speechify controls its own processing, retention, billing, and policy. See [Speechify privacy material](https://speechify.com/privacy/).
+
 ## Local data
 
 - Preferences and optional remembered credentials use `chrome.storage.local`; Speak-O does not use Chrome Sync.
 - Provider Credentials use `chrome.storage.session` by default. Choosing **Remember on this device** stores the credential in local Chrome profile storage. Speak-O does not add application-level encryption.
 - Compressed Cloud Voice audio and Speech Alignment for the active Session Buffer use `chrome.storage.session`, are bounded to 8 MiB, and are cleared when the Reading Session or extension session ends.
-- The minimal active-session descriptor contains identifiers, mode, cursor, and status. It excludes Article text and Source Page URL.
+- The minimal active-session descriptor contains identifiers, provider, mode, cursor, and status. It excludes Article text and Source Page URL.
 - Speak-O does not persist Article text, generated-audio downloads, reading history, or completed Reading Sessions.
 
 ## Permissions
 
-Speak-O runs on a Source Page only after an explicit user action. ElevenLabs origins are optional and the extension requests only the API Region selected during Provider Connection setup. Disconnecting removes the credential, cached provider metadata, provider work, and that optional origin permission.
+Speak-O runs on a Source Page only after an explicit user action. ElevenLabs and Speechify origins are optional, and the extension requests only the selected provider origin during Provider Connection setup. Each connection is independent. Disconnecting removes that provider's credential, cached metadata, provider work, and optional origin permission.
 
 ## Diagnostics
 

@@ -27,6 +27,7 @@ describe("redacted diagnostics", () => {
     } as ArticleSnapshot;
     const session = {
       mode: "browser",
+      provider: "browser",
       narrationLanguage: "en-IN",
       modelId: "not-used-by-browser-voice",
       errorCode: "VOICE_WORD_EVENTS_UNAVAILABLE",
@@ -42,6 +43,33 @@ describe("redacted diagnostics", () => {
       provider: "browser",
       modelId: null,
       errorCodes: ["VOICE_WORD_EVENTS_UNAVAILABLE"],
+    });
+  });
+
+  it("reports Speechify as the active provider", () => {
+    const article = {
+      extractor: "generic",
+      characterCount: 6,
+      blocks: [
+        {
+          id: "mapped",
+          kind: "paragraph",
+          text: "Mapped",
+          mappingIds: ["mapping-1"],
+        },
+      ],
+    } as ArticleSnapshot;
+    const session = {
+      mode: "cloud",
+      provider: "speechify",
+      narrationLanguage: "en-US",
+      modelId: "simba-3.0",
+      errorCode: null,
+    } as ReadingSessionSnapshot;
+
+    expect(buildRuntimeDiagnosticEvidence(article, session)).toMatchObject({
+      provider: "speechify",
+      modelId: "simba-3.0",
     });
   });
 

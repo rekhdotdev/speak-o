@@ -1,6 +1,11 @@
 import type { ArticleSnapshot } from "../extraction/types";
 import { segmentBlocks } from "../extraction/segmentation";
-import type { Preferences } from "../storage/preferences";
+import type {
+  CloudProviderId,
+  ElevenLabsRegion,
+  SpeechProviderId,
+} from "../provider/types";
+import { providerPreferences, type Preferences } from "../storage/preferences";
 import type {
   CommandContext,
   ReadingSessionCommand,
@@ -17,18 +22,19 @@ interface BufferedAudio {
 }
 
 interface LastGeneration {
+  provider: CloudProviderId;
   sentences: Array<{ index: number; text: string }>;
   language: string;
   voiceId: string;
   modelId: string;
-  region: import("../storage/preferences").Preferences["region"];
+  region: ElevenLabsRegion;
 }
 
 interface SpeechConfiguration {
   narrationLanguage: string;
   voiceId: string | null;
   modelId: string;
-  region: Preferences["region"];
+  region: ElevenLabsRegion;
 }
 
 interface ActiveSession {
@@ -36,7 +42,7 @@ interface ActiveSession {
   snapshot: ReadingSessionSnapshot;
   browserVoiceId: string | null;
   detectedNarrationLanguage: string;
-  providerRegion: import("../storage/preferences").Preferences["region"];
+  providerRegion: ElevenLabsRegion;
   requestedSentenceIndices: Set<number>;
   submittedSentenceIndices: Set<number>;
   receivedSentenceIndices: Set<number>;
@@ -96,6 +102,30 @@ function preferredVoice(
 ): string | null {
   const baseLanguage = language.split("-")[0] ?? language;
   return voices[language] ?? voices[baseLanguage] ?? null;
+}
+
+function speechSettings(
+  preferences: Preferences,
+  provider: SpeechProviderId,
+): {
+  voiceByLanguage: Record<string, string>;
+  modelId: string;
+  region: ElevenLabsRegion;
+} {
+  if (provider === "browser") {
+    return {
+      voiceByLanguage: preferences.browserVoiceByLanguage,
+      modelId: preferences.elevenLabs.modelId,
+      region: preferences.elevenLabs.region,
+    };
+  }
+  const selected = providerPreferences(preferences, provider);
+  return {
+    voiceByLanguage: selected.voiceByLanguage,
+    modelId: selected.modelId,
+    region:
+      provider === "elevenlabs" ? preferences.elevenLabs.region : "global",
+  };
 }
 
 function wordAtMediaTime(
@@ -219,6 +249,10 @@ export class ReadingSessionController {
       generationEpoch + 1,
     );
     const language = article.narrationLanguage;
+    const provider =
+      descriptor.provider ??
+      (descriptor.mode === "cloud" ? "elevenlabs" : "browser");
+    const selectedSettings = speechSettings(preferences, provider);
     const snapshot: ReadingSessionSnapshot = {
       version: 1,
       id: descriptor.sessionId,
@@ -227,7 +261,8 @@ export class ReadingSessionController {
       sourceFrameId: descriptor.sourceFrameId,
       title: article.title,
       status: "paused",
-      mode: descriptor.mode,
+      mode: provider === "browser" ? "browser" : "cloud",
+      provider,
       currentSentenceIndex,
       currentMediaTimeMs: Math.max(0, descriptor.mediaTimeMs),
       sentenceCount: article.sentences.length,
@@ -243,13 +278,8 @@ export class ReadingSessionController {
       playbackSpeed: preferences.playbackSpeed,
       theme: preferences.theme,
       narrationLanguage: language,
-      voiceId: preferredVoice(
-        descriptor.mode === "browser"
-          ? preferences.browserVoiceByLanguage
-          : preferences.voiceByLanguage,
-        language,
-      ),
-      modelId: preferences.modelId,
+      voiceId: preferredVoice(selectedSettings.voiceByLanguage, language),
+      modelId: selectedSettings.modelId,
       highlightsEnabled: preferences.highlightsEnabled,
       followEnabled: preferences.followEnabled,
       dock: preferences.dock,
@@ -291,7 +321,7 @@ export class ReadingSessionController {
         language,
       ),
       detectedNarrationLanguage: command.article.narrationLanguage,
-      providerRegion: preferences.region,
+      providerRegion: selectedSettings.region,
       requestedSentenceIndices,
       submittedSentenceIndices,
       receivedSentenceIndices,
@@ -324,6 +354,10 @@ export class ReadingSessionController {
     this.nextGenerationEpoch += 1;
     const article = articleForPreferences(command.article, command.preferences);
     const language = article.narrationLanguage;
+    const selectedSettings = speechSettings(
+      command.preferences,
+      command.provider,
+    );
     const snapshot: ReadingSessionSnapshot = {
       version: 1,
       id,
@@ -332,7 +366,8 @@ export class ReadingSessionController {
       sourceFrameId: command.sourceFrameId,
       title: command.article.title,
       status: "ready",
-      mode: command.mode,
+      mode: command.provider === "browser" ? "browser" : "cloud",
+      provider: command.provider,
       currentSentenceIndex: 0,
       currentMediaTimeMs: 0,
       sentenceCount: article.sentences.length,
@@ -345,13 +380,8 @@ export class ReadingSessionController {
       playbackSpeed: command.preferences.playbackSpeed,
       theme: command.preferences.theme,
       narrationLanguage: language,
-      voiceId: preferredVoice(
-        command.mode === "browser"
-          ? command.preferences.browserVoiceByLanguage
-          : command.preferences.voiceByLanguage,
-        language,
-      ),
-      modelId: command.preferences.modelId,
+      voiceId: preferredVoice(selectedSettings.voiceByLanguage, language),
+      modelId: selectedSettings.modelId,
       highlightsEnabled: command.preferences.highlightsEnabled,
       followEnabled: command.preferences.followEnabled,
       dock: command.preferences.dock,
@@ -371,7 +401,7 @@ export class ReadingSessionController {
         language,
       ),
       detectedNarrationLanguage: command.article.narrationLanguage,
-      providerRegion: command.preferences.region,
+      providerRegion: selectedSettings.region,
       requestedSentenceIndices: new Set(),
       submittedSentenceIndices: new Set(),
       receivedSentenceIndices: new Set(),
@@ -569,6 +599,7 @@ export class ReadingSessionController {
     active.canResumeMedia = false;
     const lastIndex = candidates.at(-1)?.index ?? start;
     active.lastGeneration = {
+      provider: active.snapshot.provider as CloudProviderId,
       sentences: candidates,
       language: active.snapshot.narrationLanguage,
       voiceId,
@@ -578,6 +609,7 @@ export class ReadingSessionController {
     return this.transition([
       this.contextEffect(active.snapshot, {
         type: "provider.generate",
+        provider: active.snapshot.provider as CloudProviderId,
         requestId: `${active.snapshot.id}:${active.snapshot.generationEpoch}:${start}-${lastIndex}`,
         sentences: candidates,
         language: active.snapshot.narrationLanguage,
@@ -841,6 +873,7 @@ export class ReadingSessionController {
     if (!generation) throw new Error("No Cloud Voice generation is available");
     return this.contextEffect(active.snapshot, {
       type: "provider.generate",
+      provider: generation.provider,
       requestId,
       sentences: generation.sentences,
       language: generation.language,
@@ -935,6 +968,7 @@ export class ReadingSessionController {
             voiceId
           ) {
             active.lastGeneration = {
+              provider: active.snapshot.provider as CloudProviderId,
               sentences: [{ index: destination, text: sentence.text }],
               language: active.snapshot.narrationLanguage,
               voiceId,
@@ -1088,7 +1122,11 @@ export class ReadingSessionController {
   private settingsClosed(preferences: Preferences): ReadingSessionTransition {
     const active = this.requireActive();
     active.speechSettingsOpen = false;
-    active.providerRegion = preferences.region;
+    const selectedSettings = speechSettings(
+      preferences,
+      active.snapshot.provider,
+    );
+    active.providerRegion = selectedSettings.region;
     const narrationLanguage =
       preferences.narrationLanguageOverride ?? active.detectedNarrationLanguage;
     active.browserVoiceId = preferredVoice(
@@ -1096,16 +1134,14 @@ export class ReadingSessionController {
       narrationLanguage,
     );
     const voiceId = preferredVoice(
-      active.snapshot.mode === "browser"
-        ? preferences.browserVoiceByLanguage
-        : preferences.voiceByLanguage,
+      selectedSettings.voiceByLanguage,
       narrationLanguage,
     );
     const nextConfiguration: SpeechConfiguration = {
       narrationLanguage,
       voiceId,
-      modelId: preferences.modelId,
-      region: preferences.region,
+      modelId: selectedSettings.modelId,
+      region: selectedSettings.region,
     };
     const browserConfigurationChanged =
       active.snapshot.narrationLanguage !== narrationLanguage ||
@@ -1120,7 +1156,7 @@ export class ReadingSessionController {
     active.snapshot = {
       ...active.snapshot,
       narrationLanguage,
-      modelId: preferences.modelId,
+      modelId: selectedSettings.modelId,
       voiceId,
       notice:
         active.snapshot.mode === "cloud" && active.bufferedAudio.size > 0
@@ -1207,11 +1243,12 @@ export class ReadingSessionController {
           active.requestedSentenceIndices.add(sentence.index),
         );
         active.lastGeneration = {
+          provider: active.snapshot.provider as CloudProviderId,
           sentences,
           language: narrationLanguage,
           voiceId,
-          modelId: preferences.modelId,
-          region: preferences.region,
+          modelId: selectedSettings.modelId,
+          region: selectedSettings.region,
         };
         active.resumeAfterSettings = false;
         active.snapshot = {
@@ -1289,6 +1326,7 @@ export class ReadingSessionController {
     active.snapshot = {
       ...active.snapshot,
       mode: "browser",
+      provider: "browser",
       voiceId: active.browserVoiceId,
       currentMediaTimeMs: 0,
       status: "paused",
@@ -1502,6 +1540,7 @@ export class ReadingSessionController {
         sourceTabId: snapshot.sourceTabId,
         sourceFrameId: snapshot.sourceFrameId,
         mode: snapshot.mode,
+        provider: snapshot.provider,
         currentSentenceIndex: snapshot.currentSentenceIndex,
         mediaTimeMs: snapshot.currentMediaTimeMs,
         status: snapshot.status,

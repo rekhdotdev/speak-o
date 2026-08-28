@@ -5,16 +5,22 @@ import {
 
 const expectedDefaults = {
   playbackSpeed: 1,
-  voiceByLanguage: {},
   browserVoiceByLanguage: {},
   narrationLanguageOverride: null,
   highlightsEnabled: true,
   followEnabled: true,
   theme: "system",
   dock: "bottom",
-  defaultVoiceMode: "browser",
-  region: "global",
-  modelId: "eleven_multilingual_v2",
+  defaultProvider: "browser",
+  elevenLabs: {
+    voiceByLanguage: {},
+    region: "global",
+    modelId: "eleven_multilingual_v2",
+  },
+  speechify: {
+    voiceByLanguage: {},
+    modelId: "simba-3.0",
+  },
   usageGuardCharacters: 25_000,
 } as const;
 
@@ -62,5 +68,29 @@ describe("PreferenceStore", () => {
     };
 
     await expect(store.load()).resolves.toEqual(expectedDefaults);
+  });
+
+  it("migrates the old Cloud Voice preference to ElevenLabs", async () => {
+    const local = new MemoryStorage();
+    local.values.preferences = {
+      defaultVoiceMode: "cloud",
+      voiceByLanguage: { "en-US": "legacy-voice" },
+      region: "india",
+      modelId: "legacy-model",
+    };
+    const store = new PreferenceStore(local);
+
+    await expect(store.load()).resolves.toMatchObject({
+      defaultProvider: "elevenlabs",
+      elevenLabs: {
+        voiceByLanguage: { "en-US": "legacy-voice" },
+        region: "india",
+        modelId: "legacy-model",
+      },
+      speechify: {
+        voiceByLanguage: {},
+        modelId: "simba-3.0",
+      },
+    });
   });
 });

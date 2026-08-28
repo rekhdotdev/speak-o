@@ -1,5 +1,6 @@
 import type { ArticleSnapshot } from "../extraction/types";
 import type { SessionBufferEntry } from "../session/session-buffer";
+import { isSpeechProviderId } from "../provider/types";
 import type {
   CommandContext,
   ReadingSessionDescriptor,
@@ -151,6 +152,9 @@ export function isReadingSessionDescriptor(
     Number.isSafeInteger(value.sourceFrameId) &&
     (value.sourceFrameId as number) >= 0 &&
     ["browser", "cloud"].includes(String(value.mode)) &&
+    (value.provider === undefined || isSpeechProviderId(value.provider)) &&
+    (value.provider === undefined ||
+      (value.mode === "browser") === (value.provider === "browser")) &&
     Number.isSafeInteger(value.currentSentenceIndex) &&
     (value.currentSentenceIndex as number) >= 0 &&
     typeof value.mediaTimeMs === "number" &&

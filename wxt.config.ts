@@ -8,10 +8,12 @@ const elevenLabsOrigins = [
   "https://api.sg.residency.elevenlabs.io/*",
 ];
 
+const speechifyOrigin = "https://api.speechify.ai/*";
+
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   srcDir: ".",
-  manifest: {
+  manifest: () => ({
     name: "__MSG_extensionName__",
     description: "__MSG_extensionDescription__",
     version: "0.1.0",
@@ -26,7 +28,7 @@ export default defineConfig({
       "storage",
       "tts",
     ],
-    optional_host_permissions: elevenLabsOrigins,
+    optional_host_permissions: [...elevenLabsOrigins, speechifyOrigin],
     action: {
       default_title: "__MSG_actionTitle__",
       default_icon: {
@@ -61,7 +63,7 @@ export default defineConfig({
     content_security_policy: {
       extension_pages: "script-src 'self'; object-src 'self'",
     },
-  },
+  }),
   zip: {
     artifactTemplate: "{{name}}-{{version}}-chrome.zip",
     sourcesTemplate: "{{name}}-{{version}}-sources.zip",

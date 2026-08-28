@@ -1,4 +1,9 @@
-const CREDENTIAL_KEY = "elevenLabsCredential";
+import type { CloudProviderId } from "../provider/types";
+
+const CREDENTIAL_KEYS: Record<CloudProviderId, string> = {
+  elevenlabs: "elevenLabsCredential",
+  speechify: "speechifyCredential",
+};
 
 export interface ProtectedStorageArea {
   get(key: string): Promise<Record<string, unknown>>;
@@ -41,33 +46,40 @@ export class ProviderCredentialStore {
     ]);
   }
 
-  async save(credential: string, rememberOnDevice: boolean): Promise<void> {
+  async save(
+    provider: CloudProviderId,
+    credential: string,
+    rememberOnDevice: boolean,
+  ): Promise<void> {
     if (!validCredential(credential)) {
-      throw new Error("Enter a valid ElevenLabs API key.");
+      throw new Error("Enter a valid Provider Credential.");
     }
 
-    await this.session.set({ [CREDENTIAL_KEY]: credential });
+    const key = CREDENTIAL_KEYS[provider];
+    await this.session.set({ [key]: credential });
     if (rememberOnDevice) {
-      await this.local.set({ [CREDENTIAL_KEY]: credential });
+      await this.local.set({ [key]: credential });
     } else {
-      await this.local.remove(CREDENTIAL_KEY);
+      await this.local.remove(key);
     }
   }
 
-  async load(): Promise<string | null> {
-    const sessionValue = (await this.session.get(CREDENTIAL_KEY))[
-      CREDENTIAL_KEY
-    ];
+  async load(provider: CloudProviderId): Promise<string | null> {
+    const key = CREDENTIAL_KEYS[provider];
+    const sessionValue = (await this.session.get(key))[key];
     if (validCredential(sessionValue)) return sessionValue;
 
-    const localValue = (await this.local.get(CREDENTIAL_KEY))[CREDENTIAL_KEY];
+    const localValue = (await this.local.get(key))[key];
     return validCredential(localValue) ? localValue : null;
   }
 
-  async describe(): Promise<ProviderConnectionDescription> {
-    const localValue = (await this.local.get(CREDENTIAL_KEY))[CREDENTIAL_KEY];
+  async describe(
+    provider: CloudProviderId,
+  ): Promise<ProviderConnectionDescription> {
+    const key = CREDENTIAL_KEYS[provider];
+    const localValue = (await this.local.get(key))[key];
     const remembered = validCredential(localValue);
-    const credential = await this.load();
+    const credential = await this.load(provider);
 
     return {
       connected: credential !== null,
@@ -76,10 +88,8 @@ export class ProviderCredentialStore {
     };
   }
 
-  async disconnect(): Promise<void> {
-    await Promise.all([
-      this.session.remove(CREDENTIAL_KEY),
-      this.local.remove(CREDENTIAL_KEY),
-    ]);
+  async disconnect(provider: CloudProviderId): Promise<void> {
+    const key = CREDENTIAL_KEYS[provider];
+    await Promise.all([this.session.remove(key), this.local.remove(key)]);
   }
 }

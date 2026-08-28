@@ -10,9 +10,15 @@ const settingsPortMock = {
 };
 
 const activeOptionsState = {
-  connection: { connected: false, remembered: false, maskedSuffix: null },
+  connections: {
+    elevenlabs: { connected: false, remembered: false, maskedSuffix: null },
+    speechify: { connected: false, remembered: false, maskedSuffix: null },
+  },
   preferences: DEFAULT_PREFERENCES,
-  metadata: { voices: [], models: [] },
+  metadata: {
+    elevenlabs: { voices: [], models: [] },
+    speechify: { voices: [], models: [] },
+  },
   sessionContext: {
     sessionId: "session-options",
     generationEpoch: 4,
@@ -81,6 +87,8 @@ describe("options accessibility", () => {
   beforeEach(() => {
     chromeMock.storage.local.set.mockClear();
     chromeMock.runtime.sendMessage.mockClear();
+    chromeMock.permissions.request.mockReset();
+    chromeMock.permissions.request.mockResolvedValue(false);
     chromeMock.runtime.sendMessage.mockImplementation(
       async (request: Record<string, unknown>) => {
         if (request.type === "preferences.patch") {
@@ -171,6 +179,46 @@ describe("options accessibility", () => {
       sessionId: "session-options",
       generationEpoch: 4,
     });
+  });
+
+  it("connects Speechify with its own host permission and provider identity", async () => {
+    chromeMock.permissions.request.mockResolvedValueOnce(true);
+    chromeMock.runtime.sendMessage.mockImplementation(
+      async (request: Record<string, unknown>) => {
+        if (request.type === "provider.connect") {
+          return {
+            ok: true,
+            connection: {
+              connected: true,
+              remembered: false,
+              maskedSuffix: "••••5678",
+            },
+            metadata: { voices: [], models: [] },
+          };
+        }
+        return activeOptionsState;
+      },
+    );
+    vi.stubGlobal("chrome", chromeMock);
+    const user = userEvent.setup();
+    render(<OptionsApp />);
+
+    const credentialInputs = await screen.findAllByLabelText(
+      "Provider Credential",
+    );
+    await user.type(credentialInputs[1]!, "sk_speechify_5678");
+    await user.click(screen.getByRole("button", { name: "Connect Speechify" }));
+
+    expect(chromeMock.permissions.request).toHaveBeenCalledWith({
+      origins: ["https://api.speechify.ai/*"],
+    });
+    expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "provider.connect",
+        provider: "speechify",
+        credential: "sk_speechify_5678",
+      }),
+    );
   });
 
   it("commits typed language and usage values only after editing finishes", async () => {

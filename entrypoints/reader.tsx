@@ -13,7 +13,10 @@ import {
 } from "../src/highlighting/source-highlighter";
 import { isExtensionMessage, isRecord } from "../src/contracts/runtime-guards";
 import type { ReadingSessionSnapshot } from "../src/session/types";
-import type { VoiceMode } from "../src/storage/preferences";
+import {
+  isCloudProviderId,
+  type SpeechProviderId,
+} from "../src/provider/types";
 import { sendRuntimeMessageSafely } from "../src/runtime/safe-runtime-message";
 import {
   RuntimeDebugBuffer,
@@ -172,13 +175,13 @@ export default defineUnlistedScript(() => {
         <ReaderApp
           state={runtime.state}
           debugLog={runtime.debug.format()}
-          onChooseMode={(mode: VoiceMode) => {
+          onChooseProvider={(provider: SpeechProviderId) => {
             if (!runtime.article) return;
-            appendDebug("content", "ui.mode.choose", { mode });
+            appendDebug("content", "ui.provider.choose", { provider });
             void send({
               type: "activation.start",
               article: runtime.article,
-              mode,
+              provider,
             });
           }}
           onCommand={(command, value) => {
@@ -427,19 +430,30 @@ export default defineUnlistedScript(() => {
           article,
         });
       } else if (message.type === "onboarding.show") {
+        const connections = isRecord(message.connections)
+          ? {
+              elevenlabs: message.connections.elevenlabs === true,
+              speechify: message.connections.speechify === true,
+            }
+          : { elevenlabs: false, speechify: false };
         appendDebug("content", "onboarding.show", {
-          providerConnected: message.providerConnected === true,
+          elevenLabsConnected: connections.elevenlabs,
+          speechifyConnected: connections.speechify,
         });
         runtime.state = {
           kind: "onboarding",
-          providerConnected: message.providerConnected === true,
+          connections,
         };
         render();
-      } else if (message.type === "pending.resume" && runtime.article) {
+      } else if (
+        message.type === "pending.resume" &&
+        runtime.article &&
+        isCloudProviderId(message.provider)
+      ) {
         void send({
           type: "activation.start",
           article: runtime.article,
-          mode: "cloud",
+          provider: message.provider,
         });
       } else if (
         message.type === "content.render" &&

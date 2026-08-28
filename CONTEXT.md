@@ -25,7 +25,7 @@ The browser document from which an Article Snapshot or Selection originates and 
 _Avoid_: Website, active tab
 
 **Reading Session**:
-The single active spoken reading of one Article Snapshot or Selection across the browser. It continues across tab switches and ends when another Reading Session starts, the user stops it, or the source page navigates or closes.
+The single active spoken reading of one Article Snapshot or Selection across the browser. Its Speech Provider is chosen explicitly and remains fixed unless the user switches to Browser Voice Mode. It continues across tab switches and ends when another Reading Session starts, the user stops it, or the source page navigates or closes.
 _Avoid_: Playback, audio session
 
 **Reading Position**:
@@ -41,7 +41,7 @@ The single primary language resolved for a Reading Session and used for locale-s
 _Avoid_: Browser language, interface language
 
 **Speech Alignment**:
-Timing data that maps source-text characters to generated audio and drives synchronized highlighting. Missing or invalid Speech Alignment degrades to sentence highlighting rather than an estimated word highlight.
+Timing data that maps source-text characters to generated audio and drives synchronized highlighting. Missing, unavailable, or invalid Speech Alignment degrades to sentence highlighting rather than an estimated word highlight.
 _Avoid_: Playback progress, transcript
 
 **Selection**:
@@ -61,7 +61,7 @@ A user-owned secret that grants Speak-O direct access to a Speech Provider. It r
 _Avoid_: Speak-O key, account token
 
 **Provider Connection**:
-The local authorization state created when a user grants a provider-specific host permission and supplies a valid Provider Credential. It is not a Speak-O account and can be disconnected without affecting the user's provider account.
+The local authorization state created when a user grants a provider-specific host permission and supplies a valid Provider Credential. Each Speech Provider has an independent Provider Connection. It is not a Speak-O account and can be disconnected without affecting the user's provider account or another Provider Connection.
 _Avoid_: Login, linked account
 
 **Provider Usage**:

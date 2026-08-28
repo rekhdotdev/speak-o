@@ -2,7 +2,7 @@
 
 ## Assets
 
-- The user's ElevenLabs Provider Credential
+- The user's ElevenLabs and Speechify Provider Credentials
 - Article and Selection text
 - Generated audio and Speech Alignment
 - Provider Usage under the user's account
@@ -20,7 +20,7 @@ Provider Credentials are never sent to content scripts, page main worlds, UI sna
 
 ### Overbroad network authority
 
-The manifest has no persistent host permissions. Provider origins are optional; setup requests only the selected ElevenLabs API Region after a user gesture. Disconnect removes that grant. Executable code is bundled and extension CSP permits only self-hosted scripts.
+The manifest has no persistent host permissions. Provider origins are optional; setup requests only the selected ElevenLabs API Region or Speechify API origin after a user gesture. Each provider has an independent credential, cached catalog, and permission lifecycle. Disconnect removes only that provider's grant. Executable code is bundled and extension CSP permits only self-hosted scripts.
 
 ### Unexpected or excessive Provider Usage
 
@@ -44,4 +44,4 @@ Diagnostics are generated only on explicit copy and contain identifiers, counts,
 
 ## Out of scope
 
-Protection from a compromised Chrome binary, operating system, ElevenLabs account, or Voice provider is outside the extension boundary. Provider policy and retention remain controlled by ElevenLabs.
+Protection from a compromised Chrome binary, operating system, Speech Provider account, or Voice provider is outside the extension boundary. Provider policy and retention remain controlled by ElevenLabs or Speechify, according to the provider the user selected.

@@ -4,7 +4,7 @@ import type { ReadingSessionSnapshot } from "../session/types";
 export type ExtractorIdentity = "selection" | "x-articles" | "generic";
 export type ExtractionStage =
   "selection" | "readability" | "mapping" | "validation" | "ready";
-export type ProviderIdentity = "browser" | "elevenlabs" | "none";
+export type ProviderIdentity = "browser" | "elevenlabs" | "speechify" | "none";
 
 export interface DiagnosticInput {
   extensionVersion: string;
@@ -62,7 +62,7 @@ export function buildRuntimeDiagnosticEvidence(
         ? Math.min(1, mappedCharacterCount / article.characterCount)
         : 0,
     narrationLanguage: session.narrationLanguage,
-    provider: session.mode === "cloud" ? "elevenlabs" : "browser",
+    provider: session.provider,
     modelId: session.mode === "cloud" ? session.modelId : null,
     errorCodes: session.errorCode ? [session.errorCode] : [],
   };

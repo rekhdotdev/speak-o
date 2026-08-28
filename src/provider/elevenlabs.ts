@@ -1,4 +1,11 @@
-import type { ElevenLabsRegion } from "../storage/preferences";
+import type {
+  ElevenLabsRegion,
+  ProviderGenerationRequest,
+  ProviderMetadata,
+  ProviderModel,
+  ProviderTransportEvent,
+  ProviderVoice,
+} from "./types";
 import type { SpeechAlignment } from "../session/types";
 
 const ORIGINS: Record<ElevenLabsRegion, string> = {
@@ -9,23 +16,9 @@ const ORIGINS: Record<ElevenLabsRegion, string> = {
   singapore: "https://api.sg.residency.elevenlabs.io",
 };
 
-export interface ElevenLabsVoice {
-  id: string;
-  name: string;
-  previewUrl: string | null;
-  labels: Record<string, string>;
-}
-
-export interface ElevenLabsModel {
-  id: string;
-  name: string;
-  languages: string[];
-}
-
-export interface ElevenLabsMetadata {
-  voices: ElevenLabsVoice[];
-  models: ElevenLabsModel[];
-}
+export type ElevenLabsVoice = ProviderVoice;
+export type ElevenLabsModel = ProviderModel;
+export type ElevenLabsMetadata = ProviderMetadata;
 
 type ElevenLabsMetadataResource = "models" | "voices";
 type ElevenLabsDebugValue = string | number | boolean | null;
@@ -86,6 +79,7 @@ function parseVoices(value: unknown): ElevenLabsVoice[] {
         name: voice.name.slice(0, 200),
         previewUrl,
         labels: cleanLabels(voice.labels),
+        models: [],
       },
     ];
   });
@@ -265,31 +259,12 @@ export interface WebSocketLike {
   close(code?: number, reason?: string): void;
 }
 
-export interface ElevenLabsGenerationRequest {
-  requestId: string;
-  sentences: Array<{ index: number; text: string }>;
-  voiceId: string;
-  modelId: string;
-  region: ElevenLabsRegion;
-}
+export type ElevenLabsGenerationRequest = Omit<
+  ProviderGenerationRequest,
+  "language"
+> & { language?: string };
 
-export type ElevenLabsTransportEvent =
-  | {
-      type: "audio";
-      requestId: string;
-      sentenceIndex: number;
-      audioBase64: string;
-      alignment: SpeechAlignment | null;
-      acknowledged: true;
-      isFinal: boolean;
-    }
-  | {
-      type: "failure";
-      requestId: string;
-      errorCode: "PROVIDER_SOCKET_FAILED";
-      acknowledged: boolean;
-      receivedAudio: boolean;
-    };
+export type ElevenLabsTransportEvent = ProviderTransportEvent;
 
 export type WebSocketFactory = (url: string) => WebSocketLike;
 

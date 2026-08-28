@@ -8,11 +8,8 @@ import type {
   ReadingSessionSnapshot,
   ReadingSessionStatus,
 } from "../session/types";
-import {
-  PLAYBACK_SPEEDS,
-  type PlaybackSpeed,
-  type VoiceMode,
-} from "../storage/preferences";
+import type { SpeechProviderId } from "../provider/types";
+import { PLAYBACK_SPEEDS, type PlaybackSpeed } from "../storage/preferences";
 import {
   CloseIcon,
   MaximizeIcon,
@@ -27,14 +24,17 @@ import {
 
 export type ReaderViewState =
   | { kind: "finding" }
-  | { kind: "onboarding"; providerConnected: boolean }
+  | {
+      kind: "onboarding";
+      connections: { elevenlabs: boolean; speechify: boolean };
+    }
   | { kind: "error"; title: string; message: string }
   | { kind: "session"; snapshot: ReadingSessionSnapshot };
 
 interface ReaderAppProps {
   state: ReaderViewState;
   debugLog?: string;
-  onChooseMode(mode: VoiceMode): void;
+  onChooseProvider(provider: SpeechProviderId): void;
   onCommand(command: string, value?: number): void;
   onOpenSettings(): void;
 }
@@ -143,7 +143,7 @@ function IconButton({
 export function ReaderApp({
   state,
   debugLog = EMPTY_RUNTIME_DEBUG_LOG,
-  onChooseMode,
+  onChooseProvider,
   onCommand,
   onOpenSettings,
 }: ReaderAppProps) {
@@ -281,19 +281,30 @@ export function ReaderApp({
           <button
             className="primary-button"
             type="button"
-            onClick={() => onChooseMode("browser")}
+            onClick={() => onChooseProvider("browser")}
           >
             {message("readerContinueChrome")}
           </button>
           <button
             className="secondary-button"
             type="button"
-            onClick={() => onChooseMode("cloud")}
+            onClick={() => onChooseProvider("elevenlabs")}
           >
             {message(
-              state.providerConnected
+              state.connections.elevenlabs
                 ? "readerUseElevenLabs"
                 : "readerConnectElevenLabs",
+            )}
+          </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => onChooseProvider("speechify")}
+          >
+            {message(
+              state.connections.speechify
+                ? "readerUseSpeechify"
+                : "readerConnectSpeechify",
             )}
           </button>
         </div>
@@ -452,9 +463,11 @@ export function ReaderApp({
           <SettingsIcon />
           <span>
             {message(
-              snapshot.mode === "cloud"
-                ? "readerCloudVoice"
-                : "readerChromeVoice",
+              snapshot.provider === "elevenlabs"
+                ? "readerElevenLabsVoice"
+                : snapshot.provider === "speechify"
+                  ? "readerSpeechifyVoice"
+                  : "readerChromeVoice",
             )}
           </span>
         </button>

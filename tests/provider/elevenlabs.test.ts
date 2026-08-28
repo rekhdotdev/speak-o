@@ -127,6 +127,7 @@ describe("ElevenLabs adapter contract", () => {
           name: "Calm Voice",
           previewUrl: "https://cdn.example.invalid/preview.mp3",
           labels: { accent: "Indian" },
+          models: [],
         },
       ],
       models: [

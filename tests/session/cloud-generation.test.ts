@@ -1,6 +1,30 @@
 import type { ArticleSnapshot } from "../../src/extraction/types";
 import { ReadingSessionController } from "../../src/session/reading-session";
-import { DEFAULT_PREFERENCES } from "../../src/storage/preferences";
+import {
+  DEFAULT_PREFERENCES,
+  type ElevenLabsPreferences,
+  type Preferences,
+} from "../../src/storage/preferences";
+
+type CloudTestPreferences = Partial<
+  Omit<Preferences, "elevenLabs" | "speechify" | "defaultProvider">
+> &
+  Partial<ElevenLabsPreferences> & { defaultVoiceMode?: "cloud" };
+
+function cloudPreferences({
+  voiceByLanguage = DEFAULT_PREFERENCES.elevenLabs.voiceByLanguage,
+  modelId = DEFAULT_PREFERENCES.elevenLabs.modelId,
+  region = DEFAULT_PREFERENCES.elevenLabs.region,
+  defaultVoiceMode: _legacyDefaultVoiceMode,
+  ...shared
+}: CloudTestPreferences = {}): Preferences {
+  return {
+    ...DEFAULT_PREFERENCES,
+    ...shared,
+    defaultProvider: "elevenlabs",
+    elevenLabs: { voiceByLanguage, modelId, region },
+  };
+}
 
 function cloudArticle(): ArticleSnapshot {
   const texts = [
@@ -34,6 +58,68 @@ function cloudArticle(): ArticleSnapshot {
 }
 
 describe("Cloud Voice Generation Window", () => {
+  it("keeps Speechify fixed for the Reading Session and emits provider-specific generation", () => {
+    const controller = new ReadingSessionController(() => "speechify-session");
+    controller.dispatch({
+      type: "activate",
+      article: cloudArticle(),
+      sourceTabId: 4,
+      sourceFrameId: 0,
+      provider: "speechify",
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        defaultProvider: "speechify",
+        speechify: {
+          modelId: "simba-3.0",
+          voiceByLanguage: { "en-US": "alicia" },
+        },
+      },
+    });
+
+    const preparing = controller.dispatch({
+      type: "play",
+      sessionId: "speechify-session",
+      generationEpoch: 1,
+    });
+    expect(preparing.snapshot).toMatchObject({
+      mode: "cloud",
+      provider: "speechify",
+      voiceId: "alicia",
+      modelId: "simba-3.0",
+    });
+    expect(preparing.effects).toContainEqual(
+      expect.objectContaining({
+        type: "provider.generate",
+        provider: "speechify",
+        voiceId: "alicia",
+        modelId: "simba-3.0",
+      }),
+    );
+
+    controller.dispatch({
+      type: "settings.opened",
+      sessionId: "speechify-session",
+      generationEpoch: 1,
+    });
+    const changed = controller.dispatch({
+      type: "settings.closed",
+      sessionId: "speechify-session",
+      generationEpoch: 1,
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        defaultProvider: "elevenlabs",
+        speechify: {
+          modelId: "simba-3.0",
+          voiceByLanguage: { "en-US": "alec" },
+        },
+      },
+    });
+    expect(changed.snapshot).toMatchObject({
+      provider: "speechify",
+      voiceId: "alec",
+    });
+  });
+
   it("suspends generation while speech settings are open and applies updates when they close", () => {
     const controller = new ReadingSessionController(() => "session-settings");
     controller.dispatch({
@@ -41,11 +127,10 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 1,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-old" },
-      },
+      }),
     });
 
     const opened = controller.dispatch({
@@ -79,11 +164,10 @@ describe("Cloud Voice Generation Window", () => {
       type: "settings.closed",
       sessionId: "session-settings",
       generationEpoch: 1,
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      preferences: cloudPreferences({
         modelId: "model-new",
         voiceByLanguage: { "en-US": "voice-new" },
-      },
+      }),
     });
     expect(closed.effects).toContainEqual(
       expect.objectContaining({ type: "provider.abort" }),
@@ -91,6 +175,7 @@ describe("Cloud Voice Generation Window", () => {
     expect(closed.effects).toContainEqual(
       expect.objectContaining({
         type: "provider.generate",
+        provider: "elevenlabs",
         voiceId: "voice-new",
         modelId: "model-new",
       }),
@@ -104,11 +189,10 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 1,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-old" },
-      },
+      }),
     });
     controller.dispatch({
       type: "play",
@@ -125,11 +209,10 @@ describe("Cloud Voice Generation Window", () => {
       type: "settings.closed",
       sessionId: "session-in-flight",
       generationEpoch: 1,
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      preferences: cloudPreferences({
         modelId: "model-new",
         voiceByLanguage: { "en-US": "voice-new" },
-      },
+      }),
     });
     expect(closed.snapshot).toMatchObject({
       status: "provider-issue",
@@ -150,13 +233,12 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         defaultVoiceMode: "cloud",
         voiceByLanguage: { "en-US": "voice-1" },
         region: "india",
-      },
+      }),
     });
 
     const preparing = controller.dispatch({
@@ -176,6 +258,7 @@ describe("Cloud Voice Generation Window", () => {
       {
         type: "provider.generate",
         sessionId: "cloud-session",
+        provider: "elevenlabs",
         generationEpoch: 1,
         requestId: "cloud-session:1:0-2",
         sentences: [
@@ -198,12 +281,11 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-1" },
         usageGuardCharacters: 40,
-      },
+      }),
     });
 
     const transition = controller.dispatch({
@@ -231,11 +313,10 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-1" },
-      },
+      }),
     });
     controller.dispatch({
       type: "play",
@@ -297,11 +378,10 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-1" },
-      },
+      }),
     });
     controller.dispatch({
       type: "play",
@@ -356,11 +436,10 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-1" },
-      },
+      }),
     });
     controller.dispatch({
       type: "play",
@@ -424,11 +503,10 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-1" },
-      },
+      }),
     });
     controller.dispatch({
       type: "play",
@@ -493,11 +571,10 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-1" },
-      },
+      }),
     });
     controller.dispatch({
       type: "play",
@@ -557,12 +634,11 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-1" },
         usageGuardCharacters: 59,
-      },
+      }),
     });
     const active = controller.currentSnapshot();
     if (!active) throw new Error("Session did not activate");
@@ -616,11 +692,10 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-1" },
-      },
+      }),
     });
     controller.dispatch({
       type: "play",
@@ -653,11 +728,10 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-1" },
-      },
+      }),
     });
     controller.dispatch({
       type: "play",
@@ -710,11 +784,10 @@ describe("Cloud Voice Generation Window", () => {
       article: cloudArticle(),
       sourceTabId: 11,
       sourceFrameId: 0,
-      mode: "cloud",
-      preferences: {
-        ...DEFAULT_PREFERENCES,
+      provider: "elevenlabs",
+      preferences: cloudPreferences({
         voiceByLanguage: { "en-US": "voice-1" },
-      },
+      }),
     });
     controller.dispatch({
       type: "play",

@@ -26,6 +26,19 @@ import {
   ElevenLabsTransport,
   elevenLabsOriginPattern,
 } from "../src/provider/elevenlabs";
+import {
+  SPEECHIFY_ORIGIN_PATTERN,
+  SpeechifyMetadataClient,
+  SpeechifyTransport,
+} from "../src/provider/speechify";
+import {
+  isCloudProviderId,
+  isSpeechProviderId,
+  type CloudProviderId,
+  type ProviderMetadata,
+  type ProviderTransport,
+  type SpeechProviderId,
+} from "../src/provider/types";
 import { ReadingSessionController } from "../src/session/reading-session";
 import { SerialTaskQueue } from "../src/session/serial-task-queue";
 import { SessionBuffer } from "../src/session/session-buffer";
@@ -53,7 +66,6 @@ import {
   type ElevenLabsRegion,
   type ExtensionStorageArea,
   type Preferences,
-  type VoiceMode,
 } from "../src/storage/preferences";
 import { persistSessionPreferenceIfCurrent } from "../src/storage/session-preferences";
 import { message as localizedMessage } from "../src/i18n";
@@ -61,7 +73,10 @@ import { message as localizedMessage } from "../src/i18n";
 const CONTEXT_MENU_ID = "speak-o-read-selection";
 const SESSION_DESCRIPTOR_KEY = "activeSessionDescriptor";
 const SESSION_BUFFER_KEY = "activeSessionBuffer";
-const PROVIDER_METADATA_KEY = "elevenLabsMetadata";
+const PROVIDER_METADATA_KEYS: Record<CloudProviderId, string> = {
+  elevenlabs: "elevenLabsMetadata",
+  speechify: "speechifyMetadata",
+};
 const FIRST_USE_KEY = "firstUseComplete";
 const PENDING_CLOUD_KEY = "pendingCloudActivation";
 
@@ -93,10 +108,6 @@ function protectedStorageArea(
 
 function isRegion(value: unknown): value is ElevenLabsRegion {
   return ["global", "us", "eu", "india", "singapore"].includes(String(value));
-}
-
-function isVoiceMode(value: unknown): value is VoiceMode {
-  return value === "browser" || value === "cloud";
 }
 
 export default defineBackground(() => {
@@ -244,15 +255,30 @@ export default defineBackground(() => {
     return entry;
   };
 
-  const metadataClient = new ElevenLabsMetadataClient(fetch, (event, data) => {
-    broadcastDebug("background", event, data);
-  });
-  const providerTransport = new ElevenLabsTransport(
-    undefined,
+  const elevenLabsMetadataClient = new ElevenLabsMetadataClient(
+    fetch,
     (event, data) => {
       broadcastDebug("background", event, data);
     },
   );
+  const speechifyMetadataClient = new SpeechifyMetadataClient(
+    fetch,
+    (event, data) => {
+      broadcastDebug("background", event, data);
+    },
+  );
+  const providerTransports: Record<CloudProviderId, ProviderTransport> = {
+    elevenlabs: new ElevenLabsTransport(undefined, (event, data) => {
+      broadcastDebug("background", event, data);
+    }),
+    speechify: new SpeechifyTransport(fetch, (event, data) => {
+      broadcastDebug("background", event, data);
+    }),
+  };
+
+  const forEachProviderTransport = (
+    operation: (transport: ProviderTransport) => void,
+  ) => Object.values(providerTransports).forEach(operation);
 
   const sendDebugSnapshot = async (target: ContentTarget) => {
     if (!DEBUG_MODE) return;
@@ -549,7 +575,7 @@ export default defineBackground(() => {
             browserVoice.stop();
             break;
           case "provider.generate": {
-            const credential = await credentials.load();
+            const credential = await credentials.load(effect.provider);
             if (!credential) {
               emitDebug(
                 "background",
@@ -558,6 +584,7 @@ export default defineBackground(() => {
                   requestId: effect.requestId.slice(-24),
                   session: effect.sessionId.slice(-8),
                   generationEpoch: effect.generationEpoch,
+                  provider: effect.provider,
                 },
                 target,
               );
@@ -583,6 +610,7 @@ export default defineBackground(() => {
                 requestId: effect.requestId.slice(-24),
                 session: effect.sessionId.slice(-8),
                 generationEpoch: effect.generationEpoch,
+                provider: effect.provider,
                 region: effect.region,
                 modelId: effect.modelId,
                 voiceId: effect.voiceId,
@@ -592,7 +620,7 @@ export default defineBackground(() => {
               },
               target,
             );
-            providerTransport.generateBurst(
+            providerTransports[effect.provider].generateBurst(
               effect,
               credential,
               (providerEvent) => {
@@ -656,7 +684,7 @@ export default defineBackground(() => {
               },
               target,
             );
-            providerTransport.abortAll();
+            forEachProviderTransport((transport) => transport.abortAll());
             break;
           case "provider.pause-prefetch":
             emitDebug(
@@ -668,7 +696,7 @@ export default defineBackground(() => {
               },
               target,
             );
-            providerTransport.pausePrefetch();
+            forEachProviderTransport((transport) => transport.pausePrefetch());
             break;
           case "provider.resume-prefetch":
             emitDebug(
@@ -680,7 +708,7 @@ export default defineBackground(() => {
               },
               target,
             );
-            providerTransport.resumePrefetch();
+            forEachProviderTransport((transport) => transport.resumePrefetch());
             break;
           case "buffer.store": {
             const snapshot = controller.currentSnapshot();
@@ -693,7 +721,9 @@ export default defineBackground(() => {
                 [SESSION_BUFFER_KEY]: sessionBuffer.values(),
               });
             }
-            if (decision.stopPrefetch) providerTransport.abortAll();
+            if (decision.stopPrefetch) {
+              forEachProviderTransport((transport) => transport.abortAll());
+            }
             break;
           }
           case "offscreen.ensure":
@@ -834,15 +864,16 @@ export default defineBackground(() => {
   const startSession = async (
     article: ArticleSnapshot,
     target: ContentTarget,
-    mode: VoiceMode,
+    provider: SpeechProviderId,
   ) => {
     recoveryDescriptor = null;
+    await chrome.storage.session.remove(PENDING_CLOUD_KEY);
     const replacedSessionId = controller.currentSnapshot()?.id ?? null;
     emitDebug(
       "background",
       "session.activate.start",
       {
-        mode,
+        provider,
         replacing: replacedSessionId !== null,
         sentenceCount: article.sentences.length,
       },
@@ -854,7 +885,7 @@ export default defineBackground(() => {
       article,
       sourceTabId: target.tabId,
       sourceFrameId: target.frameId,
-      mode,
+      provider,
       preferences: currentPreferences,
     });
     if (transition.snapshot) {
@@ -967,33 +998,43 @@ export default defineBackground(() => {
       },
       target,
     );
-    const [{ [FIRST_USE_KEY]: firstUse }, connection, currentPreferences] =
-      await Promise.all([
-        chrome.storage.local.get(FIRST_USE_KEY),
-        credentials.describe(),
-        preferences.load(),
-      ]);
-    if (
-      !firstUse ||
-      (currentPreferences.defaultVoiceMode === "cloud" && !connection.connected)
-    ) {
+    const [
+      { [FIRST_USE_KEY]: firstUse },
+      elevenLabsConnection,
+      speechifyConnection,
+      currentPreferences,
+    ] = await Promise.all([
+      chrome.storage.local.get(FIRST_USE_KEY),
+      credentials.describe("elevenlabs"),
+      credentials.describe("speechify"),
+      preferences.load(),
+    ]);
+    const connections = {
+      elevenlabs: elevenLabsConnection.connected,
+      speechify: speechifyConnection.connected,
+    };
+    const defaultConnected =
+      currentPreferences.defaultProvider === "browser" ||
+      connections[currentPreferences.defaultProvider];
+    if (!firstUse || !defaultConnected) {
       emitDebug(
         "background",
         "extraction.onboarding",
         {
           firstUse: Boolean(firstUse),
-          defaultMode: currentPreferences.defaultVoiceMode,
-          providerConnected: connection.connected,
+          defaultProvider: currentPreferences.defaultProvider,
+          elevenLabsConnected: connections.elevenlabs,
+          speechifyConnected: connections.speechify,
         },
         target,
       );
       await sendToContent(target, {
         type: "onboarding.show",
-        providerConnected: connection.connected,
+        connections,
       });
       return;
     }
-    await startSession(article, target, currentPreferences.defaultVoiceMode);
+    await startSession(article, target, currentPreferences.defaultProvider);
   };
 
   const observeTask = (
@@ -1401,22 +1442,25 @@ export default defineBackground(() => {
         message.type === "activation.start" &&
         senderTarget &&
         isArticleSnapshot(message.article) &&
-        isVoiceMode(message.mode)
+        isSpeechProviderId(message.provider)
       ) {
         const article = message.article;
-        const mode = message.mode;
+        const provider = message.provider;
         observeTask(
           "activation-start",
           senderTarget,
           (async () => {
-            if (mode === "cloud" && !(await credentials.describe()).connected) {
+            if (
+              provider !== "browser" &&
+              !(await credentials.describe(provider)).connected
+            ) {
               await chrome.storage.session.set({
-                [PENDING_CLOUD_KEY]: senderTarget,
+                [PENDING_CLOUD_KEY]: { target: senderTarget, provider },
               });
               await chrome.runtime.openOptionsPage();
               return;
             }
-            await startSession(article, senderTarget, mode);
+            await startSession(article, senderTarget, provider);
           })(),
         );
       } else if (message.type === "session.command") {
@@ -1641,18 +1685,32 @@ export default defineBackground(() => {
         }
       } else if (message.type === "options.get-state") {
         void (async () => {
-          const [connection, storedMetadata, currentPreferences] =
-            await Promise.all([
-              credentials.describe(),
-              chrome.storage.local.get(PROVIDER_METADATA_KEY),
-              preferences.load(),
-            ]);
+          const [
+            elevenLabsConnection,
+            speechifyConnection,
+            storedMetadata,
+            currentPreferences,
+          ] = await Promise.all([
+            credentials.describe("elevenlabs"),
+            credentials.describe("speechify"),
+            chrome.storage.local.get(Object.values(PROVIDER_METADATA_KEYS)),
+            preferences.load(),
+          ]);
           sendResponse({
-            connection,
+            connections: {
+              elevenlabs: elevenLabsConnection,
+              speechify: speechifyConnection,
+            },
             preferences: currentPreferences,
-            metadata: storedMetadata[PROVIDER_METADATA_KEY] ?? {
-              voices: [],
-              models: [],
+            metadata: {
+              elevenlabs: storedMetadata[PROVIDER_METADATA_KEYS.elevenlabs] ?? {
+                voices: [],
+                models: [],
+              },
+              speechify: storedMetadata[PROVIDER_METADATA_KEYS.speechify] ?? {
+                voices: [],
+                models: [],
+              },
             },
             sessionContext: (() => {
               const snapshot = controller.currentSnapshot();
@@ -1704,25 +1762,32 @@ export default defineBackground(() => {
         return true;
       } else if (
         message.type === "provider.connect" &&
+        isCloudProviderId(message.provider) &&
         typeof message.credential === "string" &&
         typeof message.rememberOnDevice === "boolean" &&
-        isRegion(message.region)
+        (message.provider === "speechify" || isRegion(message.region))
       ) {
         void (async () => {
-          const region = message.region as ElevenLabsRegion;
+          const provider = message.provider as CloudProviderId;
+          const region = isRegion(message.region) ? message.region : "global";
           const credential = message.credential as string;
           const rememberOnDevice = message.rememberOnDevice as boolean;
           recordDebug("background", "provider.connection.start", {
+            provider,
             region,
             credentialProvided: credential.trim().length > 0,
             rememberOnDevice,
           });
           try {
-            const origin = elevenLabsOriginPattern(region);
+            const origin =
+              provider === "elevenlabs"
+                ? elevenLabsOriginPattern(region)
+                : SPEECHIFY_ORIGIN_PATTERN;
             const permitted = await chrome.permissions.contains({
               origins: [origin],
             });
             recordDebug("background", "provider.permission.check", {
+              provider,
               region,
               granted: permitted,
             });
@@ -1734,16 +1799,23 @@ export default defineBackground(() => {
               });
               return;
             }
-            const providerMetadata = await metadataClient.validateAndLoad(
-              credential,
-              region,
-            );
-            await credentials.save(credential, rememberOnDevice);
+            const providerMetadata: ProviderMetadata =
+              provider === "elevenlabs"
+                ? await elevenLabsMetadataClient.validateAndLoad(
+                    credential,
+                    region,
+                  )
+                : await speechifyMetadataClient.validateAndLoad(credential);
+            await credentials.save(provider, credential, rememberOnDevice);
             await chrome.storage.local.set({
-              [PROVIDER_METADATA_KEY]: { ...providerMetadata, region },
+              [PROVIDER_METADATA_KEYS[provider]]:
+                provider === "elevenlabs"
+                  ? { ...providerMetadata, region }
+                  : providerMetadata,
             });
-            const connection = await credentials.describe();
+            const connection = await credentials.describe(provider);
             recordDebug("background", "provider.connection.succeeded", {
+              provider,
               region,
               voiceCount: providerMetadata.voices.length,
               modelCount: providerMetadata.models.length,
@@ -1754,15 +1826,24 @@ export default defineBackground(() => {
               metadata: providerMetadata,
               ...(DEBUG_MODE ? { debugLog: debug.format() } : {}),
             });
-            const pending = (
+            const pendingValue = (
               await chrome.storage.session.get(PENDING_CLOUD_KEY)
-            )[PENDING_CLOUD_KEY] as ContentTarget | undefined;
+            )[PENDING_CLOUD_KEY];
+            const pending =
+              isRecord(pendingValue) &&
+              isRecord(pendingValue.target) &&
+              pendingValue.provider === provider
+                ? (pendingValue.target as unknown as ContentTarget)
+                : null;
             if (
               pending &&
               Number.isSafeInteger(pending.tabId) &&
               Number.isSafeInteger(pending.frameId)
             ) {
-              await sendToContent(pending, { type: "pending.resume" });
+              await sendToContent(pending, {
+                type: "pending.resume",
+                provider,
+              });
               await chrome.storage.session.remove(PENDING_CLOUD_KEY);
             }
           } catch (error) {
@@ -1771,6 +1852,7 @@ export default defineBackground(() => {
                 ? error.code
                 : null;
             recordDebug("background", "provider.connection.failed", {
+              provider,
               region,
               errorCode,
               error: summarizeDebugError(error),
@@ -1778,11 +1860,13 @@ export default defineBackground(() => {
             const messageKey =
               errorCode === "AUTH_FAILED"
                 ? "optionsProviderAuthFailed"
-                : errorCode === "RATE_LIMITED"
-                  ? "optionsProviderRateLimited"
-                  : errorCode === "PROVIDER_UNAVAILABLE"
-                    ? "optionsProviderUnavailable"
-                    : "optionsConnectionFailed";
+                : errorCode === "PAYMENT_REQUIRED"
+                  ? "optionsProviderPaymentRequired"
+                  : errorCode === "RATE_LIMITED"
+                    ? "optionsProviderRateLimited"
+                    : errorCode === "PROVIDER_UNAVAILABLE"
+                      ? "optionsProviderUnavailable"
+                      : "optionsConnectionFailed";
             sendResponse({
               ok: false,
               message: localizedMessage(messageKey),
@@ -1793,20 +1877,31 @@ export default defineBackground(() => {
         return true;
       } else if (
         message.type === "provider.disconnect" &&
-        isRegion(message.region)
+        isCloudProviderId(message.provider) &&
+        (message.provider === "speechify" || isRegion(message.region))
       ) {
         void (async () => {
-          providerTransport.abortAll();
-          await credentials.disconnect();
-          const stored = await chrome.storage.local.get(PROVIDER_METADATA_KEY);
-          const storedMetadata = stored[PROVIDER_METADATA_KEY];
-          const connectedRegion =
-            isRecord(storedMetadata) && isRegion(storedMetadata.region)
+          const provider = message.provider as CloudProviderId;
+          providerTransports[provider].abortAll();
+          await credentials.disconnect(provider);
+          const metadataKey = PROVIDER_METADATA_KEYS[provider];
+          const stored = await chrome.storage.local.get(metadataKey);
+          const storedMetadata = stored[metadataKey];
+          const connectedRegion: ElevenLabsRegion =
+            provider === "elevenlabs" &&
+            isRecord(storedMetadata) &&
+            isRegion(storedMetadata.region)
               ? storedMetadata.region
-              : (message.region as ElevenLabsRegion);
-          await chrome.storage.local.remove(PROVIDER_METADATA_KEY);
+              : isRegion(message.region)
+                ? message.region
+                : "global";
+          await chrome.storage.local.remove(metadataKey);
           await chrome.permissions.remove({
-            origins: [elevenLabsOriginPattern(connectedRegion)],
+            origins: [
+              provider === "elevenlabs"
+                ? elevenLabsOriginPattern(connectedRegion)
+                : SPEECHIFY_ORIGIN_PATTERN,
+            ],
           });
           sendResponse({ ok: true });
         })();

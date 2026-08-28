@@ -35,7 +35,7 @@ describe("Reading Session interface", () => {
       article: article("article-language", ["Bonjour. Salut."]),
       sourceTabId: 7,
       sourceFrameId: 0,
-      mode: "browser",
+      provider: "browser",
       preferences: {
         ...DEFAULT_PREFERENCES,
         narrationLanguageOverride: "fr-FR",
@@ -71,7 +71,7 @@ describe("Reading Session interface", () => {
       article: article("article-a", ["First sentence.", "Second sentence."]),
       sourceTabId: 7,
       sourceFrameId: 0,
-      mode: "browser",
+      provider: "browser",
       preferences: DEFAULT_PREFERENCES,
     });
 
@@ -167,7 +167,7 @@ describe("Reading Session interface", () => {
       article: article("article-resume", ["One.", "Two.", "Three."]),
       sourceTabId: 9,
       sourceFrameId: 0,
-      mode: "browser",
+      provider: "browser",
       preferences: DEFAULT_PREFERENCES,
     });
     controller.dispatch({
@@ -252,7 +252,7 @@ describe("Reading Session interface", () => {
       article: article("article-advanced-resume", ["One.", "Two."]),
       sourceTabId: 9,
       sourceFrameId: 0,
-      mode: "browser",
+      provider: "browser",
       preferences: DEFAULT_PREFERENCES,
     });
     controller.dispatch({
@@ -299,7 +299,7 @@ describe("Reading Session interface", () => {
       article: article("article-delayed-start", ["One."]),
       sourceTabId: 9,
       sourceFrameId: 0,
-      mode: "browser",
+      provider: "browser",
       preferences: DEFAULT_PREFERENCES,
     });
     controller.dispatch({
@@ -333,7 +333,7 @@ describe("Reading Session interface", () => {
       article: article("article-voice", ["Hear the changed voice."]),
       sourceTabId: 9,
       sourceFrameId: 0,
-      mode: "browser",
+      provider: "browser",
       preferences: DEFAULT_PREFERENCES,
     });
     controller.dispatch({
@@ -380,7 +380,7 @@ describe("Reading Session interface", () => {
       article: article("article-cancelled", ["One."]),
       sourceTabId: 9,
       sourceFrameId: 0,
-      mode: "browser",
+      provider: "browser",
       preferences: DEFAULT_PREFERENCES,
     });
     controller.dispatch({
@@ -409,7 +409,7 @@ describe("Reading Session interface", () => {
       article: article("article-nav", ["One.", "Two.", "Three."]),
       sourceTabId: 9,
       sourceFrameId: 0,
-      mode: "browser",
+      provider: "browser",
       preferences: DEFAULT_PREFERENCES,
     });
     controller.dispatch({
@@ -506,7 +506,7 @@ describe("Reading Session interface", () => {
       article: article("article-highlight", ["Only sentence."]),
       sourceTabId: 10,
       sourceFrameId: 0,
-      mode: "browser",
+      provider: "browser",
       preferences: DEFAULT_PREFERENCES,
     });
     controller.dispatch({
@@ -571,7 +571,10 @@ describe("Reading Session interface", () => {
       },
       preferences: {
         ...DEFAULT_PREFERENCES,
-        voiceByLanguage: { "en-US": "voice-1" },
+        elevenLabs: {
+          ...DEFAULT_PREFERENCES.elevenLabs,
+          voiceByLanguage: { "en-US": "voice-1" },
+        },
       },
       bufferedAudio: [
         {

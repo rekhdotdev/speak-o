@@ -12,13 +12,13 @@ Listen to Articles on the original page with calm controls, exact highlights, an
 
 Speak-O is an open-source, accountless Article Reader for Chrome. Start it explicitly from the toolbar, a keyboard command, or selected prose. It captures a fixed Article Snapshot, skips surrounding page chrome, and keeps the active sentence highlighted on the original Source Page without rewriting the page.
 
-Use a Chrome Voice with no setup. Speak-O also includes an optional ElevenLabs BYOK Cloud Voice Mode, whose live-provider acceptance and provider-specific hardening are tracked separately before Store publication.
+Use a Chrome Voice with no setup, or connect an optional ElevenLabs or Speechify BYOK Cloud Voice provider. Each provider connection is independent and uses the user's own account.
 
 The compact floating bar provides previous, play or pause, next, sentence-based progress, Playback Speed, Voice settings, details, minimize, and stop. Choose top or bottom docking, light or dark presentation, highlighting, and follow behavior.
 
 Speak-O supports many conventional Article pages, dedicated X Articles handling, and Selection fallback. It does not claim universal extraction support, automatically read ordinary X posts or timelines, support PDFs, or operate a Rekh speech backend.
 
-Privacy: Rekh receives no Article text, Provider Credential, Provider Usage, diagnostics, or behavioral data. Cloud Voice text goes directly from the extension to ElevenLabs using the user's credential. Browser Voices may use remote platform services and are not guaranteed offline.
+Privacy: Rekh receives no Article text, Provider Credential, Provider Usage, diagnostics, or behavioral data. Cloud Voice text goes directly from the extension to the selected ElevenLabs or Speechify API using the user's credential. Browser Voices may use remote platform services and are not guaranteed offline.
 
 ## Support
 

@@ -2,7 +2,7 @@
 
 Speak-O is an open-source, accountless Article Reader for Chrome 124+. It reads a fixed Article Snapshot or explicit Selection, keeps the current sentence highlighted on the original Source Page, and gives one browser-wide Reading Session calm playback controls.
 
-ElevenLabs Cloud Voice Mode connects directly to the user's account with a Bring Your Own Key Provider Credential. Browser Voice Mode uses a Voice exposed by Chrome or the operating system and needs no Provider Connection. A Browser Voice may use a remote service and is not guaranteed to be offline.
+ElevenLabs and Speechify Cloud Voice Modes connect directly to the user's account with a Bring Your Own Key Provider Credential. Browser Voice Mode uses a Voice exposed by Chrome or the operating system and needs no Provider Connection. A Browser Voice may use a remote service and is not guaranteed to be offline.
 
 ## What 0.1.0 includes
 
@@ -10,7 +10,8 @@ ElevenLabs Cloud Voice Mode connects directly to the user's account with a Bring
 - Selection-first extraction, a dedicated X Articles Site Adapter, and conservative generic Article extraction
 - Exact CSS Custom Highlight ranges without rewriting Source Page DOM
 - Sentence navigation, sentence-based progress, 0.5x–3x Playback Speed, top or bottom docking, and a minimized state
-- Optional ElevenLabs BYOK Cloud Voice Mode; live-provider acceptance and provider-specific hardening are tracked separately in [GitHub Issue #3](https://github.com/rekhdotdev/speak-o/issues/3)
+- Optional, independent ElevenLabs and Speechify BYOK Cloud Voice connections
+- ElevenLabs word highlighting when Speech Alignment is valid; Speechify sentence highlighting
 - `chrome.tts` Browser Voice fallback
 - Session-only Provider Credentials by default, with explicit local persistence opt-in
 - No Speak-O account, backend, subscription, analytics, telemetry, or remote code
@@ -34,12 +35,12 @@ For development:
 npm run dev
 ```
 
-The normal test suite uses fakes and never needs an ElevenLabs key or consumes Provider Usage.
+The normal test suite uses fakes and never needs an ElevenLabs or Speechify key or consumes Provider Usage.
 
 ## Use Speak-O
 
 1. Open an Article and choose the Speak-O toolbar action, press `Alt+Shift+R`, or select prose and use **Read Selection with Speak-O**.
-2. On first use, continue with a Chrome Voice or open settings to connect ElevenLabs.
+2. On first use, continue with a Chrome Voice or open settings to connect ElevenLabs or Speechify.
 3. Use the floating bar to play or pause, move by sentence, view progress, change Playback Speed, minimize, or stop.
 4. Open settings to choose Voices, configure the Provider Usage guard, change the dock or theme, and copy redacted diagnostics.
 
@@ -47,7 +48,7 @@ See [Provider setup](docs/provider-setup.md) and [troubleshooting](docs/troubles
 
 ## Privacy and security
 
-Rekh receives no Article text, Provider Credential, Provider Usage, diagnostics, or behavioral data. Cloud Voice text is sent by the extension directly to the selected ElevenLabs API Region using the user's credential. Preferences use local extension storage; remembered credentials are protected by Chrome profile storage rather than application-level encryption; active audio and alignment use session storage.
+Rekh receives no Article text, Provider Credential, Provider Usage, diagnostics, or behavioral data. Cloud Voice text is sent by the extension directly to the selected ElevenLabs API Region or Speechify API using that provider's credential. Preferences use local extension storage; remembered credentials are protected by Chrome profile storage rather than application-level encryption; active audio and alignment use session storage.
 
 Read [PRIVACY.md](PRIVACY.md), [the threat model](docs/threat-model.md), and [SECURITY.md](SECURITY.md).
 

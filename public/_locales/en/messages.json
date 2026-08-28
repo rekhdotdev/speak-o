@@ -44,11 +44,13 @@
     "message": "How would you like to hear this Article?"
   },
   "readerOnboardingDescription": {
-    "message": "Use a Chrome Voice without setup, or connect your own ElevenLabs account for Cloud Voice."
+    "message": "Use a Chrome Voice without setup, or connect your own ElevenLabs or Speechify account for Cloud Voice."
   },
   "readerContinueChrome": { "message": "Continue with Chrome Voice" },
   "readerUseElevenLabs": { "message": "Use ElevenLabs" },
   "readerConnectElevenLabs": { "message": "Connect ElevenLabs" },
+  "readerUseSpeechify": { "message": "Use Speechify" },
+  "readerConnectSpeechify": { "message": "Connect Speechify" },
   "readerMinimizedLabel": { "message": "Speak-O minimized Article Reader" },
   "readerPause": { "message": "Pause" },
   "readerPlay": { "message": "Play" },
@@ -80,6 +82,8 @@
   },
   "readerPlaybackSpeed": { "message": "Playback Speed" },
   "readerCloudVoice": { "message": "Cloud Voice" },
+  "readerElevenLabsVoice": { "message": "ElevenLabs" },
+  "readerSpeechifyVoice": { "message": "Speechify" },
   "readerChromeVoice": { "message": "Chrome Voice" },
   "readerMoreDetails": { "message": "More details" },
   "readerMinimize": { "message": "Minimize controls" },
@@ -177,12 +181,13 @@
   "optionsEyebrow": { "message": "Open-source BYOK Article Reader" },
   "optionsHeading": { "message": "Make reading sound like you." },
   "optionsIntroduction": {
-    "message": "Choose a calm Chrome Voice or connect ElevenLabs directly with your own Provider Credential. Speak-O has no account or subscription."
+    "message": "Choose a calm Chrome Voice or connect ElevenLabs or Speechify directly with your own Provider Credential. Speak-O has no account or subscription."
   },
   "optionsSpeechDescription": {
     "message": "Select how Speak-O turns an Article into a controlled spoken experience."
   },
   "optionsElevenLabsCloudVoice": { "message": "ElevenLabs Cloud Voice" },
+  "optionsSpeechifyCloudVoice": { "message": "Speechify Cloud Voice" },
   "optionsDirectByok": { "message": "Direct BYOK connection" },
   "optionsConnected": {
     "message": "Connected $suffix$",
@@ -190,9 +195,13 @@
   },
   "optionsNotConnected": { "message": "Not connected" },
   "optionsDisconnectElevenLabs": { "message": "Disconnect ElevenLabs" },
+  "optionsDisconnectSpeechify": { "message": "Disconnect Speechify" },
   "optionsProviderCredential": { "message": "Provider Credential" },
   "optionsCredentialPlaceholder": {
     "message": "Paste your ElevenLabs API key"
+  },
+  "optionsSpeechifyCredentialPlaceholder": {
+    "message": "Paste your Speechify API key"
   },
   "optionsHide": { "message": "Hide" },
   "optionsReveal": { "message": "Reveal" },
@@ -202,9 +211,11 @@
   },
   "optionsConnecting": { "message": "Connecting…" },
   "optionsConnectElevenLabs": { "message": "Connect ElevenLabs" },
+  "optionsConnectSpeechify": { "message": "Connect Speechify" },
   "optionsNarrationLanguage": { "message": "Narration Language" },
   "optionsDetectLanguage": { "message": "Detect from each Article" },
   "optionsDefaultVoiceMode": { "message": "Default Voice Mode" },
+  "optionsDefaultProvider": { "message": "Default Speech Provider" },
   "optionsChromeVoice": { "message": "Chrome Voice" },
   "optionsCloudVoice": { "message": "Cloud Voice" },
   "optionsAutomaticVoice": {
@@ -230,12 +241,12 @@
   "optionsModel": { "message": "Model" },
   "optionsSearchVoices": { "message": "Search Voices" },
   "optionsVoiceSearchPlaceholder": { "message": "Name, accent, or label" },
-  "optionsAvailableVoices": { "message": "Available ElevenLabs Voices" },
+  "optionsAvailableVoices": { "message": "Available provider Voices" },
   "optionsElevenLabsVoice": { "message": "ElevenLabs Voice" },
   "optionsSelected": { "message": "Selected" },
   "optionsChoose": { "message": "Choose" },
   "optionsPreviewVoiceLabel": {
-    "message": "Preview $voice$ using ElevenLabs media",
+    "message": "Preview $voice$ using provider media",
     "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
   },
   "optionsPreview": { "message": "Preview" },
@@ -280,9 +291,10 @@
     "message": "Rekh receives no Article text, Provider Credentials, Provider Usage, diagnostics, or behavioral data."
   },
   "optionsPrivacyDetail": {
-    "message": "Chrome Voice Mode creates no Speech Provider request from Speak-O. Cloud Voice Mode sends only the submitted source text directly to ElevenLabs using your credential. Preferences stay in local extension storage; active audio uses session storage and is cleared by Chrome when the extension session ends."
+    "message": "Chrome Voice Mode creates no Speech Provider request from Speak-O. Cloud Voice Mode sends only the submitted source text directly to your selected provider using its credential. Preferences stay in local extension storage; active audio uses session storage and is cleared by Chrome when the extension session ends."
   },
   "optionsElevenLabsPrivacy": { "message": "Read ElevenLabs privacy material" },
+  "optionsSpeechifyPrivacy": { "message": "Read Speechify privacy material" },
   "optionsCopyDiagnostics": { "message": "Copy redacted diagnostics" },
   "optionsFooterTitle": { "message": "Speak-O 0.1.0 public beta" },
   "optionsFooterDetail": {
@@ -299,32 +311,35 @@
     "message": "Use a whole number from 500 to 500000, or leave it blank."
   },
   "optionsInvalidCredential": {
-    "message": "Enter a valid ElevenLabs API key."
+    "message": "Enter a valid Provider Credential."
   },
   "optionsRequestingAccess": {
-    "message": "Requesting access to the selected API Region…"
+    "message": "Requesting access to the selected provider API…"
   },
   "optionsAccessDenied": {
     "message": "Access was not granted. Speak-O did not save the key."
   },
   "optionsConnectionFailed": {
-    "message": "ElevenLabs could not be connected."
+    "message": "The speech provider could not be connected."
   },
   "optionsAllowSelectedRegion": {
-    "message": "Allow the selected ElevenLabs API Region first."
+    "message": "Allow the selected provider API origin first."
   },
   "optionsProviderAuthFailed": {
-    "message": "ElevenLabs rejected the Provider Credential."
+    "message": "The speech provider rejected the Provider Credential."
+  },
+  "optionsProviderPaymentRequired": {
+    "message": "The speech provider reports that this account needs additional balance."
   },
   "optionsProviderRateLimited": {
-    "message": "ElevenLabs rate limited the metadata request."
+    "message": "The speech provider rate limited the metadata request."
   },
   "optionsProviderUnavailable": {
-    "message": "ElevenLabs metadata is currently unavailable."
+    "message": "The speech provider metadata is currently unavailable."
   },
-  "optionsConnectionSucceeded": { "message": "ElevenLabs connected." },
+  "optionsConnectionSucceeded": { "message": "Speech provider connected." },
   "optionsDisconnected": {
-    "message": "ElevenLabs disconnected and local provider data cleared."
+    "message": "Speech provider disconnected and its local data was cleared."
   },
   "optionsNoDiagnostics": {
     "message": "No active Reading Session is available for diagnostics."

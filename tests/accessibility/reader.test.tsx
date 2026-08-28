@@ -20,6 +20,10 @@ function snapshot(status: ReadingSessionStatus): ReadingSessionSnapshot {
       status === "provider-issue" || status === "usage-limit"
         ? "cloud"
         : "browser",
+    provider:
+      status === "provider-issue" || status === "usage-limit"
+        ? "elevenlabs"
+        : "browser",
     currentSentenceIndex: 1,
     currentMediaTimeMs: 0,
     sentenceCount: 4,
@@ -54,7 +58,7 @@ async function expectNoViolations(state: ReaderViewState): Promise<void> {
   const view = render(
     <ReaderApp
       state={state}
-      onChooseMode={vi.fn()}
+      onChooseProvider={vi.fn()}
       onCommand={vi.fn()}
       onOpenSettings={vi.fn()}
     />,
@@ -77,7 +81,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "finding" }}
-        onChooseMode={vi.fn()}
+        onChooseProvider={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
@@ -93,7 +97,7 @@ describe("floating Reader accessibility", () => {
     await expectNoViolations({ kind: "finding" });
     await expectNoViolations({
       kind: "onboarding",
-      providerConnected: false,
+      connections: { elevenlabs: false, speechify: false },
     });
     await expectNoViolations({
       kind: "error",
@@ -123,7 +127,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "session", snapshot: snapshot("playing") }}
-        onChooseMode={vi.fn()}
+        onChooseProvider={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
@@ -153,7 +157,7 @@ describe("floating Reader accessibility", () => {
             notice: "sessionNoticePaused",
           },
         }}
-        onChooseMode={vi.fn()}
+        onChooseProvider={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
@@ -168,7 +172,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "session", snapshot: snapshot("paused") }}
-        onChooseMode={vi.fn()}
+        onChooseProvider={vi.fn()}
         onCommand={onCommand}
         onOpenSettings={vi.fn()}
       />,
@@ -193,7 +197,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "session", snapshot: snapshot("paused") }}
-        onChooseMode={vi.fn()}
+        onChooseProvider={vi.fn()}
         onCommand={onCommand}
         onOpenSettings={vi.fn()}
       />,
@@ -228,7 +232,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "session", snapshot: snapshot("paused") }}
-        onChooseMode={vi.fn()}
+        onChooseProvider={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
@@ -247,7 +251,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "session", snapshot: snapshot("playing") }}
-        onChooseMode={vi.fn()}
+        onChooseProvider={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
@@ -270,7 +274,7 @@ describe("floating Reader accessibility", () => {
       <ReaderApp
         state={{ kind: "finding" }}
         debugLog={"Speak-O DEBUG_MODE=true\n[content] extract.start"}
-        onChooseMode={vi.fn()}
+        onChooseProvider={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,

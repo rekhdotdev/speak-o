@@ -12,7 +12,7 @@ describe("extension UI localization", () => {
 
     expect(message("readerMinutesLeft", 3)).toBe("3 min left");
     expect(message("optionsPreviewVoiceLabel", "Rachel")).toBe(
-      "Preview Rachel using ElevenLabs media",
+      "Preview Rachel using provider media",
     );
   });
 

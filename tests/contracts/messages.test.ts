@@ -76,6 +76,38 @@ describe("runtime message contract", () => {
       }),
     ).toBe(true);
     expect(
+      isReadingSessionDescriptor({
+        version: 1,
+        sessionId: "session:speechify",
+        generationEpoch: 2,
+        sourceTabId: 7,
+        sourceFrameId: 0,
+        mode: "cloud",
+        provider: "speechify",
+        currentSentenceIndex: 0,
+        mediaTimeMs: 0,
+        status: "paused",
+        submittedCharacters: 12,
+        submittedSentenceIndices: [0],
+      }),
+    ).toBe(true);
+    expect(
+      isReadingSessionDescriptor({
+        version: 1,
+        sessionId: "session:mismatch",
+        generationEpoch: 2,
+        sourceTabId: 7,
+        sourceFrameId: 0,
+        mode: "browser",
+        provider: "speechify",
+        currentSentenceIndex: 0,
+        mediaTimeMs: 0,
+        status: "paused",
+        submittedCharacters: 0,
+        submittedSentenceIndices: [],
+      }),
+    ).toBe(false);
+    expect(
       isExtensionMessage({
         version: 1,
         target: "offscreen",

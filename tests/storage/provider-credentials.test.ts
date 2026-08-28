@@ -37,25 +37,27 @@ describe("ProviderCredentialStore", () => {
     expect(session.accessLevel).toBe("TRUSTED_CONTEXTS");
     expect(local.accessLevel).toBe("TRUSTED_CONTEXTS");
 
-    await store.save("sk_1234567890abcdef", false);
+    await store.save("elevenlabs", "sk_1234567890abcdef", false);
     expect(session.values).toEqual({
       elevenLabsCredential: "sk_1234567890abcdef",
     });
     expect(local.values).toEqual({});
-    await expect(store.describe()).resolves.toEqual({
+    await expect(store.describe("elevenlabs")).resolves.toEqual({
       connected: true,
       remembered: false,
       maskedSuffix: "••••cdef",
     });
 
-    await store.save("sk_abcdef1234567890", true);
+    await store.save("elevenlabs", "sk_abcdef1234567890", true);
     expect(local.values).toEqual({
       elevenLabsCredential: "sk_abcdef1234567890",
     });
-    await expect(store.describe()).resolves.toMatchObject({ remembered: true });
+    await expect(store.describe("elevenlabs")).resolves.toMatchObject({
+      remembered: true,
+    });
 
-    await store.disconnect();
-    await expect(store.load()).resolves.toBeNull();
+    await store.disconnect("elevenlabs");
+    await expect(store.load("elevenlabs")).resolves.toBeNull();
     expect(session.values).toEqual({});
     expect(local.values).toEqual({});
   });
@@ -65,10 +67,23 @@ describe("ProviderCredentialStore", () => {
     const local = new MemoryProtectedStorage();
     const store = new ProviderCredentialStore(session, local);
 
-    await expect(store.save("  ", true)).rejects.toThrow(
-      "Enter a valid ElevenLabs API key.",
+    await expect(store.save("speechify", "  ", true)).rejects.toThrow(
+      "Enter a valid Provider Credential.",
     );
     expect(session.values).toEqual({});
     expect(local.values).toEqual({});
+  });
+
+  it("keeps provider credentials independent", async () => {
+    const session = new MemoryProtectedStorage();
+    const local = new MemoryProtectedStorage();
+    const store = new ProviderCredentialStore(session, local);
+
+    await store.save("elevenlabs", "sk_elevenlabs_1234", false);
+    await store.save("speechify", "sk_speechify_5678", false);
+    await store.disconnect("elevenlabs");
+
+    await expect(store.load("elevenlabs")).resolves.toBeNull();
+    await expect(store.load("speechify")).resolves.toBe("sk_speechify_5678");
   });
 });

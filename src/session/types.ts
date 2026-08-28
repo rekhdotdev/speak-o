@@ -5,6 +5,11 @@ import type {
   Preferences,
   VoiceMode,
 } from "../storage/preferences";
+import type {
+  CloudProviderId,
+  ElevenLabsRegion,
+  SpeechProviderId,
+} from "../provider/types";
 
 export type ReadingSessionStatus =
   | "ready"
@@ -44,6 +49,7 @@ export interface ReadingSessionSnapshot {
   title: string | null;
   status: ReadingSessionStatus;
   mode: VoiceMode;
+  provider: SpeechProviderId;
   currentSentenceIndex: number;
   currentMediaTimeMs: number;
   sentenceCount: number;
@@ -73,6 +79,7 @@ export interface ReadingSessionDescriptor {
   sourceTabId: number;
   sourceFrameId: number;
   mode: VoiceMode;
+  provider?: SpeechProviderId;
   currentSentenceIndex: number;
   mediaTimeMs: number;
   status: ReadingSessionStatus;
@@ -133,7 +140,7 @@ export type ReadingSessionCommand =
       article: ArticleSnapshot;
       sourceTabId: number;
       sourceFrameId: number;
-      mode: VoiceMode;
+      provider: SpeechProviderId;
       preferences: Preferences;
     }
   | {
@@ -191,12 +198,13 @@ export type ReadingSessionEffect =
   | ({ type: "provider.resume-prefetch" } & EffectContext)
   | ({
       type: "provider.generate";
+      provider: CloudProviderId;
       requestId: string;
       sentences: Array<{ index: number; text: string }>;
       language: string;
       voiceId: string;
       modelId: string;
-      region: Preferences["region"];
+      region: ElevenLabsRegion;
     } & EffectContext)
   | ({ type: "audio.stop" } & EffectContext)
   | ({ type: "audio.pause" } & EffectContext)
