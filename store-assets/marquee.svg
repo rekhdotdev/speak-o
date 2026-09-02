@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560" role="img" aria-labelledby="title desc">
+  <title id="title">Speak-O article reader</title>
+  <desc id="desc">A calm Article Reader for Chrome with exact highlights.</desc>
+  <rect width="1400" height="560" fill="#5865d8"/>
+  <circle cx="1275" cy="76" r="150" fill="#ffd36a"/>
+  <circle cx="1275" cy="76" r="150" fill="none" stroke="#292722" stroke-width="4"/>
+  <text x="74" y="82" fill="#efe9d9" font-family="DejaVu Sans Mono, monospace" font-size="18" font-weight="700" letter-spacing="3">SPEAK-O / CHROME ARTICLE READER</text>
+  <text x="70" y="235" fill="#efe9d9" font-family="DejaVu Sans, sans-serif" font-size="92" font-weight="800">HEAR THE</text>
+  <text x="70" y="325" fill="#292722" font-family="DejaVu Sans, sans-serif" font-size="92" font-weight="800">PAGE.</text>
+  <text x="74" y="389" fill="#efe9d9" font-family="DejaVu Sans, sans-serif" font-size="32" font-weight="500">Stay with the words on the original page.</text>
+  <rect x="74" y="448" width="454" height="48" fill="#292722"/>
+  <text x="96" y="480" fill="#ffd36a" font-family="DejaVu Sans Mono, monospace" font-size="17" font-weight="700" letter-spacing="2">OPEN-SOURCE / BYOK / NO ACCOUNT</text>
+  <g transform="translate(1200 1) scale(.59)">
+    <rect width="128" height="128" rx="32" fill="#5865d8"/>
+    <path d="M85 38c-7-7-31-9-38 0-9 12 4 18 18 21 15 3 27 9 24 25-3 18-25 23-43 17-7-2-12-6-16-11l12-12c7 8 23 12 29 5 6-8-6-10-19-13-16-4-28-12-25-28 4-18 26-23 44-19 10 2 18 6 24 13L85 38Z" fill="white"/>
+    <circle cx="95" cy="94" r="10" fill="#ffd36a"/>
+  </g>
+  <rect x="720" y="214" width="510" height="196" fill="#efe9d9" stroke="#292722" stroke-width="4"/>
+  <rect x="745" y="240" width="460" height="30" fill="#292722"/>
+  <rect x="745" y="292" width="325" height="13" fill="#d5cdbd"/>
+  <rect x="745" y="322" width="400" height="13" fill="#d5cdbd"/>
+  <rect x="745" y="352" width="270" height="13" fill="#d5cdbd"/>
+  <rect x="836" y="385" width="365" height="45" rx="22" fill="#ffffff" stroke="#292722" stroke-width="3"/>
+  <circle cx="863" cy="407" r="13" fill="#5865d8"/>
+  <rect x="894" y="399" width="120" height="16" fill="#292722"/>
+  <rect x="1030" y="399" width="72" height="16" fill="#5865d8"/>
+</svg>

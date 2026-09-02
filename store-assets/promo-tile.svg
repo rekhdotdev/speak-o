@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280" role="img" aria-labelledby="title desc">
+  <title id="title">Speak-O article reader</title>
+  <desc id="desc">Hear the page. Stay with the words.</desc>
+  <rect width="440" height="280" fill="#efe9d9"/>
+  <rect x="18" y="18" width="404" height="244" fill="#efe9d9" stroke="#292722" stroke-width="3"/>
+  <text x="38" y="52" fill="#292722" font-family="DejaVu Sans Mono, monospace" font-size="11" font-weight="700" letter-spacing="1.5">SPEAK-O / CHROME EXTENSION</text>
+  <g transform="translate(330 37) scale(.55)">
+    <rect width="128" height="128" rx="32" fill="#5865d8" stroke="#292722" stroke-width="5"/>
+    <path d="M85 38c-7-7-31-9-38 0-9 12 4 18 18 21 15 3 27 9 24 25-3 18-25 23-43 17-7-2-12-6-16-11l12-12c7 8 23 12 29 5 6-8-6-10-19-13-16-4-28-12-25-28 4-18 26-23 44-19 10 2 18 6 24 13L85 38Z" fill="white"/>
+    <circle cx="95" cy="94" r="10" fill="#ffd36a"/>
+  </g>
+  <text x="38" y="112" fill="#292722" font-family="DejaVu Sans, sans-serif" font-size="35" font-weight="800">HEAR THE</text>
+  <text x="38" y="148" fill="#292722" font-family="DejaVu Sans, sans-serif" font-size="35" font-weight="800">PAGE.</text>
+  <rect x="38" y="176" width="205" height="31" fill="#292722"/>
+  <text x="49" y="197" fill="#efe9d9" font-family="DejaVu Sans Mono, monospace" font-size="12" font-weight="700" letter-spacing="1">STAY WITH THE WORDS</text>
+  <text x="38" y="235" fill="#5865d8" font-family="DejaVu Sans Mono, monospace" font-size="11" font-weight="700" letter-spacing="1.2">OPEN-SOURCE / BYOK / CALM CONTROLS</text>
+</svg>

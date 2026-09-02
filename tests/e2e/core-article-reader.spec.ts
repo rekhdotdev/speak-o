@@ -362,7 +362,7 @@ test("unpacked extension activates and renders deterministic core states", async
       ).toHaveCount(0);
       await expect(settingsPage.locator(".eyebrow")).toHaveCount(0);
       await expect(
-        settingsPage.getByRole("img", { name: "Speak-O" }),
+        settingsPage.getByRole("img", { name: "speak-o" }),
       ).toBeVisible();
       await expect(
         settingsPage.getByRole("link", {

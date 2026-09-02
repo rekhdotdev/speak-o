@@ -2,6 +2,8 @@
 
 Speak-O is an open-source, accountless Article Reader for Chrome 124+. It reads a fixed Article Snapshot or explicit Selection, keeps the current sentence highlighted on the original Source Page, and gives one browser-wide Reading Session calm playback controls.
 
+[Install speak-o from the Chrome Web Store](https://chromewebstore.google.com/detail/speak-o/kjamjfihhlhhnnkbknkfjinenbfmlkgl)
+
 ElevenLabs and Speechify Cloud Voice Modes connect directly to the user's account with a Bring Your Own Key Provider Credential. Browser Voice Mode uses a Voice exposed by Chrome or the operating system and needs no Provider Connection. A Browser Voice may use a remote service and is not guaranteed to be offline.
 
 ## What 0.1.0 includes
@@ -45,6 +47,18 @@ The normal test suite uses fakes and never needs an ElevenLabs or Speechify key 
 4. Open settings to choose Voices, configure the Provider Usage guard, change the dock or theme, and copy redacted diagnostics.
 
 See [Provider setup](docs/provider-setup.md) and [troubleshooting](docs/troubleshooting.md).
+
+## See it in action
+
+These screenshots are generated from the current production build using the deterministic Chromium E2E fixture. The Article is synthetic and contains no private browsing data or Provider Credential.
+
+![Speak-O reading session with bottom-docked controls](docs/screenshots/store-session-bottom-light.png)
+
+![Speak-O reading session with top-docked dark controls and word highlighting](docs/screenshots/store-session-top-dark.png)
+
+![Speak-O Speech settings with independent BYOK provider connections](docs/screenshots/store-settings.png)
+
+The complete Chrome Web Store media set and upload notes are in [`store-assets/`](store-assets/README.md).
 
 ## Privacy and security
 

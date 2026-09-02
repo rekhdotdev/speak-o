@@ -1,10 +1,12 @@
 # Speak-O privacy notice
 
-Canonical source for the intended public page at `https://rekh.dev/speak-o/`.
+Canonical source for the intended public page at `https://rekh.dev/speak-o/privacy/`.
 
-Last updated: 29 August 2026.
+Last updated: 2 September 2026.
 
 Speak-O is an accountless, open-source Chrome Article Reader published by Rekh. Rekh does not operate a Speak-O speech backend, account service, analytics service, telemetry pipeline, crash reporter, or remote diagnostics service.
+
+Speak-O's handling of user data complies with the Chrome Web Store User Data Policy, including the Limited Use requirements.
 
 ## Data Rekh receives
 

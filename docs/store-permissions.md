@@ -19,4 +19,4 @@ The manifest lists the supported ElevenLabs API Regions and Speechify API as opt
 
 Speak-O handles website content only to extract and read the Article Snapshot or Selection requested by the user. Cloud Voice source text is sent directly to the selected ElevenLabs or Speechify API under the user's own account; Rekh does not receive it. Authentication information is used only for that direct Provider Connection. Data is not sold, used for advertising, transferred to Rekh, or used for unrelated purposes.
 
-No analytics, tracking, remote configuration, remotely hosted code, or automatic diagnostic upload is present. The canonical privacy source is `PRIVACY.md` and is intended for `https://rekh.dev/speak-o/`.
+No analytics, tracking, remote configuration, remotely hosted code, or automatic diagnostic upload is present. The canonical privacy source is `PRIVACY.md` and is intended for `https://rekh.dev/speak-o/privacy/`.

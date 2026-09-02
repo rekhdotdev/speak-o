@@ -2,7 +2,7 @@
 
 ## Name
 
-Speak-O — BYOK Article Reader
+speak-o
 
 ## Short description
 
@@ -22,6 +22,20 @@ Privacy: Rekh receives no Article text, Provider Credential, Provider Usage, dia
 
 ## Support
 
+- Chrome Web Store: `https://chromewebstore.google.com/detail/speak-o/kjamjfihhlhhnnkbknkfjinenbfmlkgl`
 - Source and Issues: `https://github.com/rekhdotdev/speak-o`
-- Intended privacy page: `https://rekh.dev/speak-o/`
+- Homepage: `https://rekh.dev/speak-o/`
+- Privacy policy: `https://rekh.dev/speak-o/privacy/`
+- Support: `https://rekh.dev/speak-o/support/`
 - Extraction failures: use the repository's extraction-failure Issue form with redacted diagnostics.
+
+## Store media
+
+Upload the files in [`store-assets/`](../store-assets/):
+
+- `icon-128.png`
+- `screenshots/01-onboarding.png` through `screenshots/05-settings.png`
+- `promo-tile-440x280.png`
+- `marquee-1400x560.png` if the dashboard requests the optional marquee asset
+
+The screenshots are current deterministic Chromium captures against the repository's synthetic Article fixture. They contain no private browsing data or Provider Credential.
