@@ -11,8 +11,8 @@ describe("extension UI localization", () => {
     });
 
     expect(message("readerMinutesLeft", 3)).toBe("3 min left");
-    expect(message("optionsPreviewVoiceLabel", "Rachel")).toBe(
-      "Preview Rachel using provider media",
+    expect(message("voicePlayPreviewLabel", "Rachel")).toBe(
+      "Play Rachel preview using provider media",
     );
   });
 

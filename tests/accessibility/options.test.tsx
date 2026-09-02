@@ -127,6 +127,145 @@ describe("options accessibility", () => {
       screen.queryByText("Make reading sound like you."),
     ).not.toBeInTheDocument();
     expect(view.container.querySelectorAll(".eyebrow")).toHaveLength(0);
+    expect(
+      screen.getByRole("link", {
+        name: "How to get an API key from ElevenLabs (opens in a new tab)",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "https://elevenlabs.io/docs/eleven-api/quickstart",
+    );
+    expect(
+      screen.getByRole("link", {
+        name: "How to get an API key from Speechify (opens in a new tab)",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "https://docs.sws.speechify.com/text-to-speech/get-started/quickstart",
+    );
+    expect((await axe.run(view.container)).violations).toEqual([]);
+  }, 10_000);
+
+  it("uses the onboarding preview and selection behavior in later settings", async () => {
+    const audio = document.createElement("audio");
+    const play = vi.spyOn(audio, "play").mockResolvedValue();
+    const pause = vi.spyOn(audio, "pause").mockImplementation(() => undefined);
+    vi.spyOn(audio, "load").mockImplementation(() => undefined);
+    const audioConstructor = vi.fn(function MockAudio() {
+      return audio;
+    });
+    vi.stubGlobal("Audio", audioConstructor);
+    const settingsState = {
+      ...activeOptionsState,
+      connections: {
+        ...activeOptionsState.connections,
+        elevenlabs: {
+          connected: true,
+          remembered: false,
+          maskedSuffix: "••••1234",
+        },
+      },
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        elevenLabs: {
+          ...DEFAULT_PREFERENCES.elevenLabs,
+          voiceByLanguage: {
+            "en-US": "voice-rachel",
+            en: "voice-rachel",
+          },
+        },
+      },
+      metadata: {
+        ...activeOptionsState.metadata,
+        elevenlabs: {
+          voices: [
+            {
+              id: "voice-rachel",
+              name: "Rachel",
+              previewUrl: "https://cdn.example.invalid/rachel.mp3",
+              labels: { accent: "american_english" },
+              models: [],
+            },
+            {
+              id: "voice-adam",
+              name: "Adam",
+              previewUrl: "https://cdn.example.invalid/adam.mp3",
+              labels: { useCase: "conversational_voice" },
+              models: [],
+            },
+          ],
+          models: [],
+        },
+      },
+    };
+    chromeMock.runtime.sendMessage.mockImplementation(
+      async (request: Record<string, unknown>) => {
+        if (request.type === "preferences.patch") {
+          return {
+            ok: true,
+            preferences: {
+              ...settingsState.preferences,
+              ...(request.patch as object),
+            },
+          };
+        }
+        return settingsState;
+      },
+    );
+    vi.stubGlobal("chrome", chromeMock);
+    const user = userEvent.setup();
+    const view = render(<OptionsApp />);
+
+    const rachelSelected = await screen.findByRole("img", {
+      name: "Rachel selected",
+    });
+    expect(rachelSelected).toHaveClass("voice-selected");
+    expect(rachelSelected.closest('[role="listitem"]')).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
+    expect(screen.getByText("American English")).toHaveClass("voice-tag");
+    expect(screen.getByText("Conversational Voice")).toHaveClass("voice-tag");
+
+    const preview = screen.getByRole("button", {
+      name: "Play Adam preview using provider media",
+    });
+    expect(preview).toHaveTextContent("");
+    expect(
+      view.container.querySelector(
+        'a[href="https://cdn.example.invalid/adam.mp3"]',
+      ),
+    ).not.toBeInTheDocument();
+    expect(view.container.querySelectorAll("button button")).toHaveLength(0);
+    await user.click(preview);
+    expect(audioConstructor).toHaveBeenCalledOnce();
+    expect(audio.preload).toBe("none");
+    expect(audio.src).toBe("https://cdn.example.invalid/adam.mp3");
+    expect(play).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("button", { name: "Pause Adam preview" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    const search = screen.getByRole("searchbox", {
+      name: "Search Voices · ElevenLabs",
+    });
+    await user.type(search, "no match");
+    expect(
+      await screen.findByText(
+        "No compatible Voices are available for this language and Model.",
+      ),
+    ).toBeVisible();
+    await waitFor(() => expect(pause).toHaveBeenCalled());
+
+    await user.clear(search);
+    await user.click(screen.getByRole("button", { name: /Adam.*Choose/ }));
+    const adamSelected = await screen.findByRole("img", {
+      name: "Adam selected",
+    });
+    expect(adamSelected.closest('[role="listitem"]')).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
     expect((await axe.run(view.container)).violations).toEqual([]);
   }, 10_000);
 
@@ -290,6 +429,14 @@ describe("options accessibility", () => {
     );
     const credential = screen.getByLabelText("Provider Credential");
     expect(credential).toHaveAttribute("type", "password");
+    expect(
+      screen.getByRole("link", {
+        name: "How to get an API key from ElevenLabs (opens in a new tab)",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "https://elevenlabs.io/docs/eleven-api/quickstart",
+    );
     const reveal = screen.getByRole("button", { name: "Reveal" });
     expect(reveal).toHaveTextContent("");
     await user.click(reveal);
@@ -314,10 +461,8 @@ describe("options accessibility", () => {
     });
     expect(preview).toHaveAttribute("aria-pressed", "false");
     expect(preview).toHaveTextContent("");
-    expect(screen.getByText("American English")).toHaveClass("setup-voice-tag");
-    expect(screen.getByText("Conversational Voice")).toHaveClass(
-      "setup-voice-tag",
-    );
+    expect(screen.getByText("American English")).toHaveClass("voice-tag");
+    expect(screen.getByText("Conversational Voice")).toHaveClass("voice-tag");
     await user.click(preview);
     expect(audioConstructor).toHaveBeenCalledOnce();
     expect(audio.preload).toBe("none");
@@ -332,7 +477,7 @@ describe("options accessibility", () => {
     await user.click(screen.getByRole("button", { name: /Rachel.*Choose/ }));
     expect(finish).toBeEnabled();
     expect(screen.getByRole("img", { name: "Rachel selected" })).toHaveClass(
-      "setup-voice-selected",
+      "voice-selected",
     );
     expect(screen.getByRole("listitem").getAttribute("data-selected")).toBe(
       "true",

@@ -199,6 +199,14 @@ test("unpacked extension activates and renders deterministic core states", async
       await expect(
         optionsPage.getByRole("button", { name: "Reveal" }),
       ).toBeVisible();
+      await expect(
+        optionsPage.getByRole("link", {
+          name: "How to get an API key from ElevenLabs (opens in a new tab)",
+        }),
+      ).toHaveAttribute(
+        "href",
+        "https://elevenlabs.io/docs/eleven-api/quickstart",
+      );
       await capture(optionsPage, testInfo, "03-credential-field");
       await optionsPage.emulateMedia({ colorScheme: "light" });
       await optionsPage.getByRole("button", { name: "Back" }).click();
@@ -356,6 +364,14 @@ test("unpacked extension activates and renders deterministic core states", async
       await expect(
         settingsPage.getByRole("img", { name: "Speak-O" }),
       ).toBeVisible();
+      await expect(
+        settingsPage.getByRole("link", {
+          name: "How to get an API key from Speechify (opens in a new tab)",
+        }),
+      ).toHaveAttribute(
+        "href",
+        "https://docs.sws.speechify.com/text-to-speech/get-started/quickstart",
+      );
       await capture(settingsPage, testInfo, "08-functional-settings");
       await settingsPage.close();
     });

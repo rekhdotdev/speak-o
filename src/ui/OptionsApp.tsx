@@ -31,8 +31,10 @@ import {
   OnboardingWizard,
   type ProviderConnectionState,
 } from "./OnboardingWizard";
+import { CloudVoiceList } from "./CloudVoiceList";
 import { CredentialVisibilityButton } from "./CredentialVisibilityButton";
 import { ProductLogo } from "./ProductLogo";
+import { ProviderCredentialHelp } from "./ProviderCredentialHelp";
 
 interface ShortcutState {
   name: string;
@@ -660,6 +662,7 @@ export function OptionsApp() {
                         />
                       </div>
                     </label>
+                    <ProviderCredentialHelp provider={provider} />
                     <label className="remember-row">
                       <input
                         type="checkbox"
@@ -856,6 +859,10 @@ export function OptionsApp() {
             const preferenceKey =
               provider === "elevenlabs" ? "elevenLabs" : "speechify";
             const providerPreferences = preferences[preferenceKey];
+            const selectedVoiceId =
+              providerPreferences.voiceByLanguage[narrationLanguage] ??
+              providerPreferences.voiceByLanguage[baseNarrationLanguage] ??
+              null;
             return (
               <div className="voice-picker" key={provider}>
                 <label className="field">
@@ -875,68 +882,28 @@ export function OptionsApp() {
                     }}
                   />
                 </label>
-                <div
-                  className="voice-list"
-                  role="list"
-                  aria-label={`${providerName(provider)} voices`}
-                >
-                  {visibleVoices(provider).map((voice) => (
-                    <div
-                      className="voice-option"
-                      key={voice.id}
-                      role="listitem"
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void savePreferences({
-                            [preferenceKey]: {
-                              ...providerPreferences,
-                              voiceByLanguage: {
-                                ...providerPreferences.voiceByLanguage,
-                                [narrationLanguage]: voice.id,
-                                [baseNarrationLanguage]: voice.id,
-                              },
-                            },
-                          })
-                        }
-                      >
-                        <span dir="auto">
-                          <strong>{voice.name}</strong>
-                          <small>
-                            {Object.values(voice.labels).join(" · ") ||
-                              `${providerName(provider)} Voice`}
-                          </small>
-                        </span>
-                        <span>
-                          {providerPreferences.voiceByLanguage[
-                            narrationLanguage
-                          ] === voice.id ||
-                          providerPreferences.voiceByLanguage[
-                            baseNarrationLanguage
-                          ] === voice.id
-                            ? message("optionsSelected")
-                            : message("optionsChoose")}
-                        </span>
-                      </button>
-                      {voice.previewUrl ? (
-                        <a
-                          href={voice.previewUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={message(
-                            "optionsPreviewVoiceLabel",
-                            voice.name,
-                          )}
-                        >
-                          {message("optionsPreview")}
-                        </a>
-                      ) : (
-                        <small>{message("optionsPreviewUnavailable")}</small>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <CloudVoiceList
+                  ariaLabel={message(
+                    "setupAvailableVoices",
+                    providerName(provider),
+                  )}
+                  emptyMessage={message("setupNoVoices")}
+                  providerName={providerName(provider)}
+                  selectedVoiceId={selectedVoiceId}
+                  voices={visibleVoices(provider)}
+                  onSelect={(voice) =>
+                    savePreferences({
+                      [preferenceKey]: {
+                        ...providerPreferences,
+                        voiceByLanguage: {
+                          ...providerPreferences.voiceByLanguage,
+                          [narrationLanguage]: voice.id,
+                          [baseNarrationLanguage]: voice.id,
+                        },
+                      },
+                    })
+                  }
+                />
               </div>
             );
           })}

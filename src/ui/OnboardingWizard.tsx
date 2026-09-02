@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { interfaceDirection, message } from "../i18n";
 import type {
   CloudProviderId,
@@ -7,9 +7,10 @@ import type {
   SpeechProviderId,
 } from "../provider/types";
 import type { PreferencePatch, Preferences } from "../storage/preferences";
+import { CloudVoiceList } from "./CloudVoiceList";
 import { CredentialVisibilityButton } from "./CredentialVisibilityButton";
-import { CheckIcon, PauseIcon, PlayIcon } from "./icons";
 import { ProductLogo } from "./ProductLogo";
+import { ProviderCredentialHelp } from "./ProviderCredentialHelp";
 import { ProviderLogo } from "./ProviderLogo";
 
 export interface ProviderConnectionState {
@@ -44,18 +45,6 @@ const providerName = (provider: SpeechProviderId) =>
       ? "Speechify"
       : message("optionsChromeVoice");
 
-const humanizeVoiceLabel = (label: string) =>
-  label
-    .trim()
-    .split(/_+/)
-    .filter(Boolean)
-    .map((word) =>
-      /^[a-z]{2}-[A-Z]{2}$/.test(word)
-        ? word
-        : `${word.charAt(0).toLocaleUpperCase()}${word.slice(1).toLocaleLowerCase()}`,
-    )
-    .join(" ");
-
 export function OnboardingWizard({
   narrationLanguage,
   connections,
@@ -80,11 +69,7 @@ export function OnboardingWizard({
   const [browserVoiceChoice, setBrowserVoiceChoice] = useState<string | null>(
     null,
   );
-  const [previewingVoiceId, setPreviewingVoiceId] = useState<string | null>(
-    null,
-  );
   const [finishing, setFinishing] = useState(false);
-  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const baseNarrationLanguage =
     narrationLanguage.split("-")[0] ?? narrationLanguage;
 
@@ -128,55 +113,6 @@ export function OnboardingWizard({
     });
   }, [baseNarrationLanguage, metadata, preferences, provider, voiceSearch]);
 
-  const stopVoicePreview = () => {
-    const audio = previewAudioRef.current;
-    previewAudioRef.current = null;
-    setPreviewingVoiceId(null);
-    if (!audio) return;
-    audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
-  };
-
-  const toggleVoicePreview = (voice: ProviderVoice) => {
-    if (!voice.previewUrl) return;
-    if (previewAudioRef.current && previewingVoiceId === voice.id) {
-      stopVoicePreview();
-      return;
-    }
-
-    stopVoicePreview();
-    const audio = new Audio();
-    audio.preload = "none";
-    audio.src = voice.previewUrl;
-    const settle = () => {
-      if (previewAudioRef.current !== audio) return;
-      previewAudioRef.current = null;
-      setPreviewingVoiceId(null);
-    };
-    audio.addEventListener("ended", settle, { once: true });
-    audio.addEventListener("error", settle, { once: true });
-    previewAudioRef.current = audio;
-    setPreviewingVoiceId(voice.id);
-    void audio.play().catch(() => {
-      audio.pause();
-      audio.removeAttribute("src");
-      settle();
-    });
-  };
-
-  useEffect(
-    () => () => {
-      const audio = previewAudioRef.current;
-      previewAudioRef.current = null;
-      if (!audio) return;
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-    },
-    [],
-  );
-
   const chooseProvider = (nextProvider: SpeechProviderId) => {
     setProvider(nextProvider);
     setVoiceSearch("");
@@ -218,7 +154,6 @@ export function OnboardingWizard({
 
   const selectCloudVoice = async (voice: ProviderVoice) => {
     if (provider !== "elevenlabs" && provider !== "speechify") return;
-    stopVoicePreview();
     const preferenceKey =
       provider === "elevenlabs" ? "elevenLabs" : "speechify";
     const current = preferences[preferenceKey];
@@ -237,7 +172,6 @@ export function OnboardingWizard({
 
   const finish = async () => {
     if (!provider) return;
-    stopVoicePreview();
     setFinishing(true);
     const completed = await onComplete(provider);
     if (!completed) setFinishing(false);
@@ -356,6 +290,7 @@ export function OnboardingWizard({
                   />
                 </div>
               </label>
+              <ProviderCredentialHelp provider={provider} />
               <label className="remember-row">
                 <input
                   type="checkbox"
@@ -438,120 +373,22 @@ export function OnboardingWizard({
                     type="search"
                     value={voiceSearch}
                     placeholder={message("optionsVoiceSearchPlaceholder")}
-                    onChange={(event) => {
-                      stopVoicePreview();
-                      setVoiceSearch(event.currentTarget.value);
-                    }}
+                    onChange={(event) =>
+                      setVoiceSearch(event.currentTarget.value)
+                    }
                   />
                 </label>
-                <div
-                  className="setup-voice-list"
-                  role="list"
-                  aria-label={message(
+                <CloudVoiceList
+                  ariaLabel={message(
                     "setupAvailableVoices",
                     providerName(provider),
                   )}
-                >
-                  {cloudVoices.map((voice) => {
-                    const selected = selectedCloudVoiceId === voice.id;
-                    const previewing = previewingVoiceId === voice.id;
-                    const labels = [
-                      ...new Set(
-                        Object.values(voice.labels)
-                          .map(humanizeVoiceLabel)
-                          .filter(Boolean),
-                      ),
-                    ];
-                    if (labels.length === 0) {
-                      labels.push(`${providerName(provider)} Voice`);
-                    }
-                    return (
-                      <div
-                        className="setup-voice-option"
-                        data-selected={selected}
-                        key={voice.id}
-                        role="listitem"
-                      >
-                        {selected ? (
-                          <span
-                            aria-label={message(
-                              "setupSelectedVoiceLabel",
-                              voice.name,
-                            )}
-                            className="setup-voice-selected"
-                            role="img"
-                            title={message(
-                              "setupSelectedVoiceLabel",
-                              voice.name,
-                            )}
-                          >
-                            <CheckIcon />
-                          </span>
-                        ) : voice.previewUrl ? (
-                          <button
-                            aria-label={message(
-                              previewing
-                                ? "setupPauseVoicePreviewLabel"
-                                : "setupPlayVoicePreviewLabel",
-                              voice.name,
-                            )}
-                            aria-pressed={previewing}
-                            className="setup-voice-preview"
-                            title={message(
-                              previewing
-                                ? "setupPauseVoicePreviewLabel"
-                                : "setupPlayVoicePreviewLabel",
-                              voice.name,
-                            )}
-                            type="button"
-                            onClick={() => toggleVoicePreview(voice)}
-                          >
-                            <span className="setup-voice-preview-glyph">
-                              <span data-visible={!previewing}>
-                                <PlayIcon />
-                              </span>
-                              <span data-visible={previewing}>
-                                <PauseIcon />
-                              </span>
-                            </span>
-                          </button>
-                        ) : (
-                          <span
-                            aria-hidden="true"
-                            className="setup-voice-leading-placeholder"
-                          />
-                        )}
-                        <button
-                          aria-pressed={selected}
-                          className="setup-voice-choice"
-                          type="button"
-                          onClick={() => void selectCloudVoice(voice)}
-                        >
-                          <span className="setup-voice-copy">
-                            <strong>{voice.name}</strong>
-                            <span className="setup-voice-tags">
-                              {labels.map((label) => (
-                                <small className="setup-voice-tag" key={label}>
-                                  {label}
-                                </small>
-                              ))}
-                            </span>
-                          </span>
-                          <span>
-                            {selected
-                              ? message("optionsSelected")
-                              : message("optionsChoose")}
-                          </span>
-                        </button>
-                      </div>
-                    );
-                  })}
-                  {cloudVoices.length === 0 ? (
-                    <p className="setup-empty-voices">
-                      {message("setupNoVoices")}
-                    </p>
-                  ) : null}
-                </div>
+                  emptyMessage={message("setupNoVoices")}
+                  providerName={providerName(provider)}
+                  selectedVoiceId={selectedCloudVoiceId}
+                  voices={cloudVoices}
+                  onSelect={selectCloudVoice}
+                />
               </div>
             )}
 
@@ -561,7 +398,6 @@ export function OnboardingWizard({
                 type="button"
                 disabled={finishing}
                 onClick={() => {
-                  stopVoicePreview();
                   setStep(
                     provider === "browser" || connections[provider].connected
                       ? "provider"

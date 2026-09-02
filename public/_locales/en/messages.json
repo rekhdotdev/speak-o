@@ -262,6 +262,19 @@
   "optionsSpeechifyCredentialPlaceholder": {
     "message": "Paste your Speechify API key"
   },
+  "providerApiKeyHelpPrompt": { "message": "Need an API key?" },
+  "providerApiKeyHelpLink": {
+    "message": "How to get one from $provider$",
+    "placeholders": {
+      "provider": { "content": "$1", "example": "ElevenLabs" }
+    }
+  },
+  "providerApiKeyHelpLabel": {
+    "message": "How to get an API key from $provider$ (opens in a new tab)",
+    "placeholders": {
+      "provider": { "content": "$1", "example": "ElevenLabs" }
+    }
+  },
   "optionsHide": { "message": "Hide" },
   "optionsReveal": { "message": "Reveal" },
   "optionsRememberDevice": { "message": "Remember on this device" },
@@ -300,29 +313,19 @@
   "optionsModel": { "message": "Model" },
   "optionsSearchVoices": { "message": "Search Voices" },
   "optionsVoiceSearchPlaceholder": { "message": "Name, accent, or label" },
-  "optionsAvailableVoices": { "message": "Available provider Voices" },
-  "optionsElevenLabsVoice": { "message": "ElevenLabs Voice" },
   "optionsSelected": { "message": "Selected" },
   "optionsChoose": { "message": "Choose" },
-  "optionsPreviewVoiceLabel": {
-    "message": "Preview $voice$ using provider media",
-    "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
-  },
-  "setupPlayVoicePreviewLabel": {
+  "voicePlayPreviewLabel": {
     "message": "Play $voice$ preview using provider media",
     "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
   },
-  "setupPauseVoicePreviewLabel": {
+  "voicePausePreviewLabel": {
     "message": "Pause $voice$ preview",
     "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
   },
-  "setupSelectedVoiceLabel": {
+  "voiceSelectedLabel": {
     "message": "$voice$ selected",
     "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
-  },
-  "optionsPreview": { "message": "Preview" },
-  "optionsPreviewUnavailable": {
-    "message": "Preview unavailable; Speak-O will not generate a paid preview."
   },
   "optionsReadingDescription": {
     "message": "Keep Reading Position and visual orientation under your control."
