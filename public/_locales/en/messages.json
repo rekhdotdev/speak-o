@@ -39,18 +39,20 @@
   "readerFindingArticle": { "message": "Finding the Article…" },
   "readerClose": { "message": "Close Speak-O" },
   "readerOnboardingLabel": { "message": "Set up Speak-O" },
-  "readerPublicBeta": { "message": "Speak-O public beta" },
   "readerOnboardingTitle": {
-    "message": "How would you like to hear this Article?"
+    "message": "Set up Speak-O to start listening"
   },
   "readerOnboardingDescription": {
-    "message": "Use a Chrome Voice without setup, or connect your own ElevenLabs or Speechify account for Cloud Voice."
+    "message": "Choose your default provider and Voice once. You can change them later in Settings."
   },
-  "readerContinueChrome": { "message": "Continue with Chrome Voice" },
-  "readerUseElevenLabs": { "message": "Use ElevenLabs" },
-  "readerConnectElevenLabs": { "message": "Connect ElevenLabs" },
-  "readerUseSpeechify": { "message": "Use Speechify" },
-  "readerConnectSpeechify": { "message": "Connect Speechify" },
+  "readerStartSetup": { "message": "Set up Speak-O" },
+  "readerSettingsRequiredTitle": {
+    "message": "Your default provider needs attention"
+  },
+  "readerSettingsRequiredDescription": {
+    "message": "Open settings to reconnect it or choose another provider."
+  },
+  "readerOpenSettings": { "message": "Open settings" },
   "readerMinimizedLabel": { "message": "Speak-O minimized Article Reader" },
   "readerPause": { "message": "Pause" },
   "readerPlay": { "message": "Play" },
@@ -169,6 +171,7 @@
   },
   "optionsDocumentTitle": { "message": "Speak-O settings" },
   "optionsRootMissing": { "message": "Options root is missing" },
+  "optionsLoading": { "message": "Loading Speak-O…" },
   "optionsHomeLabel": { "message": "Speak-O settings home" },
   "optionsPublicBetaVersion": { "message": "Public beta · 0.1.0" },
   "optionsSectionsLabel": { "message": "Settings sections" },
@@ -178,10 +181,66 @@
   "optionsShortcuts": { "message": "Shortcuts" },
   "optionsPrivacyDiagnostics": { "message": "Privacy & diagnostics" },
   "optionsPublisher": { "message": "Open-source software published by Rekh." },
-  "optionsEyebrow": { "message": "Open-source BYOK Article Reader" },
-  "optionsHeading": { "message": "Make reading sound like you." },
-  "optionsIntroduction": {
-    "message": "Choose a calm Chrome Voice or connect ElevenLabs or Speechify directly with your own Provider Credential. Speak-O has no account or subscription."
+  "setupTitle": { "message": "Set up Speak-O" },
+  "setupIntroduction": {
+    "message": "Choose your default speech provider and Voice. You can change them later in Settings."
+  },
+  "setupProgressLabel": { "message": "Setup progress" },
+  "setupStepProgress": {
+    "message": "Step $current$ of $total$",
+    "placeholders": {
+      "current": { "content": "$1", "example": "1" },
+      "total": { "content": "$2", "example": "3" }
+    }
+  },
+  "setupProviderTitle": { "message": "Choose a speech provider" },
+  "setupProviderDescription": {
+    "message": "Speak-O will use this provider by default and will never switch providers silently."
+  },
+  "setupElevenLabsDescription": {
+    "message": "Recommended Cloud Voice with word highlighting when alignment is available."
+  },
+  "setupSpeechifyDescription": {
+    "message": "Cloud Voice with sentence highlighting."
+  },
+  "setupChromeDescription": {
+    "message": "No Provider Credential required. Uses a Voice available through Chrome."
+  },
+  "setupConnectTitle": {
+    "message": "Connect $provider$",
+    "placeholders": {
+      "provider": { "content": "$1", "example": "ElevenLabs" }
+    }
+  },
+  "setupConnectDescription": {
+    "message": "Speak-O checks the credential directly with $provider$ and stores it only on this device.",
+    "placeholders": {
+      "provider": { "content": "$1", "example": "ElevenLabs" }
+    }
+  },
+  "setupCheckConnection": { "message": "Check connection" },
+  "setupVoiceTitle": { "message": "Choose a Voice" },
+  "setupChooseChromeVoice": { "message": "Choose a Chrome Voice" },
+  "setupVoiceDescription": {
+    "message": "Select the $provider$ Voice Speak-O should use by default.",
+    "placeholders": {
+      "provider": { "content": "$1", "example": "ElevenLabs" }
+    }
+  },
+  "setupAvailableVoices": {
+    "message": "Available $provider$ Voices",
+    "placeholders": {
+      "provider": { "content": "$1", "example": "ElevenLabs" }
+    }
+  },
+  "setupNoVoices": {
+    "message": "No compatible Voices are available for this language and Model."
+  },
+  "setupBack": { "message": "Back" },
+  "setupFinish": { "message": "Finish and start listening" },
+  "setupFinishing": { "message": "Starting…" },
+  "setupFinishFailed": {
+    "message": "Setup could not return to the Article. Keep this page open and try again."
   },
   "optionsSpeechDescription": {
     "message": "Select how Speak-O turns an Article into a controlled spoken experience."
@@ -247,6 +306,18 @@
   "optionsChoose": { "message": "Choose" },
   "optionsPreviewVoiceLabel": {
     "message": "Preview $voice$ using provider media",
+    "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
+  },
+  "setupPlayVoicePreviewLabel": {
+    "message": "Play $voice$ preview using provider media",
+    "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
+  },
+  "setupPauseVoicePreviewLabel": {
+    "message": "Pause $voice$ preview",
+    "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
+  },
+  "setupSelectedVoiceLabel": {
+    "message": "$voice$ selected",
     "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
   },
   "optionsPreview": { "message": "Preview" },

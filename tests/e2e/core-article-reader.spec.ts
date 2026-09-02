@@ -171,18 +171,55 @@ test("unpacked extension activates and renders deterministic core states", async
       await expect(onboarding).toBeVisible();
       await expect(
         onboarding.getByRole("button", {
-          name: "Continue with Chrome Voice",
+          name: "Set up Speak-O",
         }),
       ).toBeVisible();
       await expect(page.getByText("DEBUG_MODE is on")).toHaveCount(0);
       await capture(page, testInfo, "01-onboarding");
     });
 
-    await test.step("choosing Chrome Voice creates the real Browser Voice Reading Session", async () => {
+    await test.step("first-run setup returns to the Article and creates the real Browser Voice Reading Session", async () => {
       await installDeterministicBrowserVoice(worker);
-      await page
-        .getByRole("button", { name: "Continue with Chrome Voice" })
+      const optionsPagePromise = context.waitForEvent("page");
+      await page.getByRole("button", { name: "Set up Speak-O" }).click();
+      const optionsPage = await optionsPagePromise;
+      await expect(
+        optionsPage.getByRole("heading", { name: "Choose a speech provider" }),
+      ).toBeVisible();
+      await capture(optionsPage, testInfo, "02-provider-setup");
+      await optionsPage
+        .getByRole("button", {
+          name: /ElevenLabs.*Recommended Cloud Voice/,
+        })
         .click();
+      await optionsPage.emulateMedia({ colorScheme: "dark" });
+      const credential = optionsPage.getByLabel("Provider Credential");
+      await credential.focus();
+      await expect(credential).toBeFocused();
+      await expect(
+        optionsPage.getByRole("button", { name: "Reveal" }),
+      ).toBeVisible();
+      await capture(optionsPage, testInfo, "03-credential-field");
+      await optionsPage.emulateMedia({ colorScheme: "light" });
+      await optionsPage.getByRole("button", { name: "Back" }).click();
+      await optionsPage
+        .getByRole("button", {
+          name: /Chrome Voice.*No Provider Credential required/,
+        })
+        .click();
+      await expect(
+        optionsPage.getByRole("heading", { name: "Choose a Voice" }),
+      ).toBeVisible();
+      const finishSetup = optionsPage.getByRole("button", {
+        name: "Finish and start listening",
+      });
+      await expect(finishSetup).toBeDisabled();
+      await optionsPage
+        .getByRole("combobox", { name: "Chrome Voice" })
+        .selectOption("");
+      await expect(finishSetup).toBeEnabled();
+      await finishSetup.click();
+      await expect.poll(() => optionsPage.isClosed()).toBe(true);
       const reader = page.getByRole("region", {
         name: "Speak-O Article Reader",
       });
@@ -221,7 +258,7 @@ test("unpacked extension activates and renders deterministic core states", async
       await expect(progress).toHaveAttribute("value", "24");
       await expect(progress).toHaveAttribute("max", "100");
       await expect(progress).toHaveJSProperty("tagName", "PROGRESS");
-      await capture(page, testInfo, "02-session-bottom-light");
+      await capture(page, testInfo, "04-session-bottom-light");
     });
 
     await test.step("details, minimize, and restore use the real UI controls", async () => {
@@ -230,7 +267,7 @@ test("unpacked extension activates and renders deterministic core states", async
       });
       await reader.getByRole("button", { name: "More details" }).click();
       await expect(reader.getByText("Now reading")).toBeVisible();
-      await capture(page, testInfo, "03-session-expanded");
+      await capture(page, testInfo, "05-session-expanded");
 
       await reader.getByRole("button", { name: "Minimize controls" }).click();
       const compact = page.getByRole("region", {
@@ -244,7 +281,7 @@ test("unpacked extension activates and renders deterministic core states", async
         "outline-style",
         "solid",
       );
-      await capture(page, testInfo, "04-session-minimized");
+      await capture(page, testInfo, "06-session-minimized");
 
       await page.keyboard.press("Tab");
       const maximize = compact.getByRole("button", {
@@ -299,7 +336,28 @@ test("unpacked extension activates and renders deterministic core states", async
       });
       expect(highlights.sentence).toContain("A calm synthetic Article");
       expect(highlights.word).toEqual(["calm"]);
-      await capture(page, testInfo, "05-top-dark-word-highlight");
+      await capture(page, testInfo, "07-top-dark-word-highlight");
+    });
+
+    await test.step("later settings opens the functional page without the marketing header", async () => {
+      const settingsPagePromise = context.waitForEvent("page");
+      await worker.evaluate(() => chrome.runtime.openOptionsPage());
+      const settingsPage = await settingsPagePromise;
+      await expect(
+        settingsPage.getByRole("heading", { name: "Speak-O settings" }),
+      ).toBeAttached();
+      await expect(
+        settingsPage.getByRole("heading", { name: "Speech" }),
+      ).toBeVisible();
+      await expect(
+        settingsPage.getByText("Make reading sound like you."),
+      ).toHaveCount(0);
+      await expect(settingsPage.locator(".eyebrow")).toHaveCount(0);
+      await expect(
+        settingsPage.getByRole("img", { name: "Speak-O" }),
+      ).toBeVisible();
+      await capture(settingsPage, testInfo, "08-functional-settings");
+      await settingsPage.close();
     });
   } finally {
     await context.close();

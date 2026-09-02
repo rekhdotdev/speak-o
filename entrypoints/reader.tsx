@@ -13,10 +13,7 @@ import {
 } from "../src/highlighting/source-highlighter";
 import { isExtensionMessage, isRecord } from "../src/contracts/runtime-guards";
 import type { ReadingSessionSnapshot } from "../src/session/types";
-import {
-  isCloudProviderId,
-  type SpeechProviderId,
-} from "../src/provider/types";
+import { isSpeechProviderId } from "../src/provider/types";
 import { sendRuntimeMessageSafely } from "../src/runtime/safe-runtime-message";
 import {
   RuntimeDebugBuffer,
@@ -175,13 +172,12 @@ export default defineUnlistedScript(() => {
         <ReaderApp
           state={runtime.state}
           debugLog={runtime.debug.format()}
-          onChooseProvider={(provider: SpeechProviderId) => {
+          onStartSetup={() => {
             if (!runtime.article) return;
-            appendDebug("content", "ui.provider.choose", { provider });
+            appendDebug("content", "ui.onboarding.start", {});
             void send({
-              type: "activation.start",
-              article: runtime.article,
-              provider,
+              type: "onboarding.start",
+              narrationLanguage: runtime.article.narrationLanguage,
             });
           }}
           onCommand={(command, value) => {
@@ -430,25 +426,14 @@ export default defineUnlistedScript(() => {
           article,
         });
       } else if (message.type === "onboarding.show") {
-        const connections = isRecord(message.connections)
-          ? {
-              elevenlabs: message.connections.elevenlabs === true,
-              speechify: message.connections.speechify === true,
-            }
-          : { elevenlabs: false, speechify: false };
-        appendDebug("content", "onboarding.show", {
-          elevenLabsConnected: connections.elevenlabs,
-          speechifyConnected: connections.speechify,
-        });
-        runtime.state = {
-          kind: "onboarding",
-          connections,
-        };
+        const firstRun = message.firstRun !== false;
+        appendDebug("content", "onboarding.show", { firstRun });
+        runtime.state = { kind: "onboarding", firstRun };
         render();
       } else if (
-        message.type === "pending.resume" &&
+        message.type === "onboarding.resume" &&
         runtime.article &&
-        isCloudProviderId(message.provider)
+        isSpeechProviderId(message.provider)
       ) {
         void send({
           type: "activation.start",

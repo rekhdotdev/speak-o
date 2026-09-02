@@ -8,7 +8,6 @@ import type {
   ReadingSessionSnapshot,
   ReadingSessionStatus,
 } from "../session/types";
-import type { SpeechProviderId } from "../provider/types";
 import { PLAYBACK_SPEEDS, type PlaybackSpeed } from "../storage/preferences";
 import {
   CloseIcon,
@@ -21,20 +20,18 @@ import {
   PreviousIcon,
   SettingsIcon,
 } from "./icons";
+import { ProductLogo } from "./ProductLogo";
 
 export type ReaderViewState =
   | { kind: "finding" }
-  | {
-      kind: "onboarding";
-      connections: { elevenlabs: boolean; speechify: boolean };
-    }
+  | { kind: "onboarding"; firstRun: boolean }
   | { kind: "error"; title: string; message: string }
   | { kind: "session"; snapshot: ReadingSessionSnapshot };
 
 interface ReaderAppProps {
   state: ReaderViewState;
   debugLog?: string;
-  onChooseProvider(provider: SpeechProviderId): void;
+  onStartSetup(): void;
   onCommand(command: string, value?: number): void;
   onOpenSettings(): void;
 }
@@ -143,7 +140,7 @@ function IconButton({
 export function ReaderApp({
   state,
   debugLog = EMPTY_RUNTIME_DEBUG_LOG,
-  onChooseProvider,
+  onStartSetup,
   onCommand,
   onOpenSettings,
 }: ReaderAppProps) {
@@ -236,9 +233,7 @@ export function ReaderApp({
         aria-live="polite"
         dir={interfaceDirection()}
       >
-        <span className="brand-mark" aria-hidden="true">
-          S
-        </span>
+        <ProductLogo className="brand-mark" decorative />
         <span>{message("readerFindingArticle")}</span>
       </section>,
     );
@@ -272,42 +267,26 @@ export function ReaderApp({
         aria-label={message("readerOnboardingLabel")}
         dir={interfaceDirection()}
       >
+        <ProductLogo className="brand-mark onboarding-mark" decorative />
         <div className="onboarding-copy">
-          <span className="eyebrow">{message("readerPublicBeta")}</span>
-          <h2>{message("readerOnboardingTitle")}</h2>
-          <p>{message("readerOnboardingDescription")}</p>
-        </div>
-        <div className="onboarding-actions">
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => onChooseProvider("browser")}
-          >
-            {message("readerContinueChrome")}
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => onChooseProvider("elevenlabs")}
-          >
+          <strong>
             {message(
-              state.connections.elevenlabs
-                ? "readerUseElevenLabs"
-                : "readerConnectElevenLabs",
+              state.firstRun
+                ? "readerOnboardingTitle"
+                : "readerSettingsRequiredTitle",
             )}
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => onChooseProvider("speechify")}
-          >
+          </strong>
+          <span>
             {message(
-              state.connections.speechify
-                ? "readerUseSpeechify"
-                : "readerConnectSpeechify",
+              state.firstRun
+                ? "readerOnboardingDescription"
+                : "readerSettingsRequiredDescription",
             )}
-          </button>
+          </span>
         </div>
+        <button className="primary-button" type="button" onClick={onStartSetup}>
+          {message(state.firstRun ? "readerStartSetup" : "readerOpenSettings")}
+        </button>
       </section>,
     );
   }
@@ -326,9 +305,7 @@ export function ReaderApp({
         tabIndex={0}
         onKeyDown={handleKeyDown}
       >
-        <span className="brand-mark" aria-label={message("extensionName")}>
-          S
-        </span>
+        <ProductLogo className="brand-mark" />
         <button
           ref={compactPlayButton}
           aria-label={message(playing ? "readerPause" : "readerPlay")}
@@ -391,12 +368,7 @@ export function ReaderApp({
         </div>
       ) : null}
       <div className="main-row">
-        <span
-          className="brand-mark desktop-brand"
-          aria-label={message("extensionName")}
-        >
-          S
-        </span>
+        <ProductLogo className="brand-mark desktop-brand" />
         <div
           className="transport-controls"
           aria-label={message("readerControls")}

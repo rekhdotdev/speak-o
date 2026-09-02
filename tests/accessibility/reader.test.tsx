@@ -58,7 +58,7 @@ async function expectNoViolations(state: ReaderViewState): Promise<void> {
   const view = render(
     <ReaderApp
       state={state}
-      onChooseProvider={vi.fn()}
+      onStartSetup={vi.fn()}
       onCommand={vi.fn()}
       onOpenSettings={vi.fn()}
     />,
@@ -81,7 +81,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "finding" }}
-        onChooseProvider={vi.fn()}
+        onStartSetup={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
@@ -95,10 +95,7 @@ describe("floating Reader accessibility", () => {
 
   it("has no automated violations in its important visible states", async () => {
     await expectNoViolations({ kind: "finding" });
-    await expectNoViolations({
-      kind: "onboarding",
-      connections: { elevenlabs: false, speechify: false },
-    });
+    await expectNoViolations({ kind: "onboarding", firstRun: true });
     await expectNoViolations({
       kind: "error",
       title: "No readable Article found",
@@ -122,12 +119,33 @@ describe("floating Reader accessibility", () => {
     }
   }, 20_000);
 
+  it("keeps first-run provider decisions inside one setup action", async () => {
+    const user = userEvent.setup();
+    const onStartSetup = vi.fn();
+    render(
+      <ReaderApp
+        state={{ kind: "onboarding", firstRun: true }}
+        onStartSetup={onStartSetup}
+        onCommand={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", {
+        name: /ElevenLabs|Speechify|Chrome Voice/,
+      }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Set up Speak-O" }));
+    expect(onStartSetup).toHaveBeenCalledOnce();
+  });
+
   it("keeps essential controls named when minimized and restores focus", async () => {
     const user = userEvent.setup();
     render(
       <ReaderApp
         state={{ kind: "session", snapshot: snapshot("playing") }}
-        onChooseProvider={vi.fn()}
+        onStartSetup={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
@@ -157,7 +175,7 @@ describe("floating Reader accessibility", () => {
             notice: "sessionNoticePaused",
           },
         }}
-        onChooseProvider={vi.fn()}
+        onStartSetup={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
@@ -172,7 +190,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "session", snapshot: snapshot("paused") }}
-        onChooseProvider={vi.fn()}
+        onStartSetup={vi.fn()}
         onCommand={onCommand}
         onOpenSettings={vi.fn()}
       />,
@@ -197,7 +215,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "session", snapshot: snapshot("paused") }}
-        onChooseProvider={vi.fn()}
+        onStartSetup={vi.fn()}
         onCommand={onCommand}
         onOpenSettings={vi.fn()}
       />,
@@ -232,7 +250,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "session", snapshot: snapshot("paused") }}
-        onChooseProvider={vi.fn()}
+        onStartSetup={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
@@ -251,7 +269,7 @@ describe("floating Reader accessibility", () => {
     render(
       <ReaderApp
         state={{ kind: "session", snapshot: snapshot("playing") }}
-        onChooseProvider={vi.fn()}
+        onStartSetup={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,
@@ -274,7 +292,7 @@ describe("floating Reader accessibility", () => {
       <ReaderApp
         state={{ kind: "finding" }}
         debugLog={"Speak-O DEBUG_MODE=true\n[content] extract.start"}
-        onChooseProvider={vi.fn()}
+        onStartSetup={vi.fn()}
         onCommand={vi.fn()}
         onOpenSettings={vi.fn()}
       />,

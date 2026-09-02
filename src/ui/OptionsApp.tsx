@@ -27,12 +27,12 @@ import {
 } from "../provider/types";
 import type { CommandContext } from "../session/types";
 import { interfaceDirection, message } from "../i18n";
-
-interface ConnectionState {
-  connected: boolean;
-  remembered: boolean;
-  maskedSuffix: string | null;
-}
+import {
+  OnboardingWizard,
+  type ProviderConnectionState,
+} from "./OnboardingWizard";
+import { CredentialVisibilityButton } from "./CredentialVisibilityButton";
+import { ProductLogo } from "./ProductLogo";
 
 interface ShortcutState {
   name: string;
@@ -40,13 +40,13 @@ interface ShortcutState {
   shortcut?: string;
 }
 
-const emptyConnection: ConnectionState = {
+const emptyConnection: ProviderConnectionState = {
   connected: false,
   remembered: false,
   maskedSuffix: null,
 };
 
-const emptyConnections: Record<CloudProviderId, ConnectionState> = {
+const emptyConnections: Record<CloudProviderId, ProviderConnectionState> = {
   elevenlabs: emptyConnection,
   speechify: emptyConnection,
 };
@@ -61,13 +61,11 @@ const providerName = (provider: CloudProviderId) =>
 
 function Section({
   id,
-  eyebrow,
   title,
   description,
   children,
 }: {
   id: string;
-  eyebrow: string;
   title: string;
   description: string;
   children: React.ReactNode;
@@ -79,7 +77,6 @@ function Section({
       aria-labelledby={`${id}-title`}
     >
       <header className="section-heading">
-        <span className="eyebrow">{eyebrow}</span>
         <h2 id={`${id}-title`}>{title}</h2>
         <p>{description}</p>
       </header>
@@ -118,7 +115,9 @@ export function OptionsApp() {
   const [preferences, setPreferences] =
     useState<Preferences>(DEFAULT_PREFERENCES);
   const [connections, setConnections] =
-    useState<Record<CloudProviderId, ConnectionState>>(emptyConnections);
+    useState<Record<CloudProviderId, ProviderConnectionState>>(
+      emptyConnections,
+    );
   const [metadata, setMetadata] =
     useState<Record<CloudProviderId, ProviderMetadata>>(emptyMetadata);
   const [credentials, setCredentials] = useState<
@@ -159,6 +158,10 @@ export function OptionsApp() {
   const [sessionContext, setSessionContext] = useState<CommandContext | null>(
     null,
   );
+  const [stateLoaded, setStateLoaded] = useState(false);
+  const [setupNarrationLanguage, setSetupNarrationLanguage] = useState<
+    string | null
+  >(null);
   useEffect(() => {
     const settingsPort = chrome.runtime.connect({ name: "speech-settings" });
     let disposed = false;
@@ -184,13 +187,17 @@ export function OptionsApp() {
       .then((response: unknown) => {
         if (typeof response !== "object" || response === null) return;
         const state = response as {
-          connections?: Record<CloudProviderId, ConnectionState>;
-          connection?: ConnectionState;
+          connections?: Record<CloudProviderId, ProviderConnectionState>;
+          connection?: ProviderConnectionState;
           preferences?: Preferences;
           metadata?:
             ProviderMetadata | Record<CloudProviderId, ProviderMetadata>;
           debugLog?: string;
           sessionContext?: CommandContext | null;
+          onboarding?: {
+            pending?: boolean;
+            narrationLanguage?: string;
+          };
         };
         if (state.connections) {
           setConnections(state.connections);
@@ -212,6 +219,12 @@ export function OptionsApp() {
           }
         }
         if (typeof state.debugLog === "string") setDebugLog(state.debugLog);
+        if (
+          state.onboarding?.pending === true &&
+          typeof state.onboarding.narrationLanguage === "string"
+        ) {
+          setSetupNarrationLanguage(state.onboarding.narrationLanguage);
+        }
         const context = state.sessionContext;
         if (
           !disposed &&
@@ -230,6 +243,10 @@ export function OptionsApp() {
             generationEpoch: context.generationEpoch,
           });
         }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!disposed) setStateLoaded(true);
       });
     const loadBrowserVoices = () => {
       void chrome.tts.getVoices().then(setBrowserVoices);
@@ -287,7 +304,9 @@ export function OptionsApp() {
       .startsWith(baseNarrationLanguage.toLocaleLowerCase());
   });
 
-  const savePreferences = async (patch: PreferencePatch) => {
+  const savePreferences = async (
+    patch: PreferencePatch,
+  ): Promise<Preferences | null> => {
     try {
       const response = (await chrome.runtime.sendMessage({
         version: 1,
@@ -299,12 +318,13 @@ export function OptionsApp() {
       if (response?.ok && response.preferences) {
         setPreferences(response.preferences);
         setStatus(message("optionsPreferencesSaved"));
-        return;
+        return response.preferences;
       }
     } catch {
       // The status below keeps a stale/invalidated extension context visible.
     }
     setStatus(message("optionsPreferencesSaveFailed"));
+    return null;
   };
 
   const commitNarrationLanguage = () => {
@@ -331,11 +351,15 @@ export function OptionsApp() {
     void savePreferences(patch);
   };
 
-  const connect = async (provider: CloudProviderId) => {
-    const credential = credentials[provider].trim();
+  const connect = async (
+    provider: CloudProviderId,
+    suppliedCredential = credentials[provider],
+    rememberOnDevice = remember[provider],
+  ): Promise<boolean> => {
+    const credential = suppliedCredential.trim();
     if (credential.length < 8) {
       setStatus(message("optionsInvalidCredential"));
-      return;
+      return false;
     }
     setBusyProvider(provider);
     setStatus(message("optionsRequestingAccess"));
@@ -349,7 +373,7 @@ export function OptionsApp() {
       });
       if (!granted) {
         setStatus(message("optionsAccessDenied"));
-        return;
+        return false;
       }
       const response = (await chrome.runtime.sendMessage({
         version: 1,
@@ -357,12 +381,12 @@ export function OptionsApp() {
         type: "provider.connect",
         provider,
         credential,
-        rememberOnDevice: remember[provider],
+        rememberOnDevice,
         region: preferences.elevenLabs.region,
       })) as {
         ok: boolean;
         message?: string;
-        connection?: ConnectionState;
+        connection?: ProviderConnectionState;
         metadata?: ProviderMetadata;
         debugLog?: string;
       };
@@ -372,7 +396,7 @@ export function OptionsApp() {
       if (!response.ok) {
         await chrome.permissions.remove({ origins: [originPattern] });
         setStatus(response.message ?? message("optionsConnectionFailed"));
-        return;
+        return false;
       }
       setConnections((current) => ({
         ...current,
@@ -383,11 +407,33 @@ export function OptionsApp() {
         [provider]: response.metadata ?? { voices: [], models: [] },
       }));
       setStatus(message("optionsConnectionSucceeded"));
+      return true;
+    } catch {
+      setStatus(message("optionsConnectionFailed"));
+      return false;
     } finally {
       setCredentials((current) => ({ ...current, [provider]: "" }));
       setRevealed((current) => ({ ...current, [provider]: false }));
       setBusyProvider(null);
     }
+  };
+
+  const completeOnboarding = async (
+    provider: SpeechProviderId,
+  ): Promise<boolean> => {
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        version: 1,
+        target: "background",
+        type: "onboarding.complete",
+        provider,
+      })) as { ok?: boolean; message?: string } | undefined;
+      if (response?.ok) return true;
+      setStatus(response?.message ?? message("setupFinishFailed"));
+    } catch {
+      setStatus(message("setupFinishFailed"));
+    }
+    return false;
   };
 
   const disconnect = async (provider: CloudProviderId) => {
@@ -479,6 +525,34 @@ export function OptionsApp() {
     }
   };
 
+  if (!stateLoaded) {
+    return (
+      <main className="setup-layout" dir={interfaceDirection()}>
+        <div className="setup-loading" role="status">
+          <ProductLogo className="setup-logo" />
+          <span>{message("optionsLoading")}</span>
+        </div>
+      </main>
+    );
+  }
+
+  if (setupNarrationLanguage) {
+    return (
+      <OnboardingWizard
+        narrationLanguage={setupNarrationLanguage}
+        connections={connections}
+        metadata={metadata}
+        browserVoices={browserVoices}
+        preferences={preferences}
+        busyProvider={busyProvider}
+        status={status}
+        onConnect={connect}
+        onSavePreferences={savePreferences}
+        onComplete={completeOnboarding}
+      />
+    );
+  }
+
   return (
     <main className="options-layout" dir={interfaceDirection()}>
       <aside className="options-sidebar">
@@ -487,7 +561,7 @@ export function OptionsApp() {
           href="#speech"
           aria-label={message("optionsHomeLabel")}
         >
-          <span className="product-mark">S</span>
+          <ProductLogo className="product-mark" />
           <span>
             <strong>{message("extensionName")}</strong>
             <small>{message("optionsPublicBetaVersion")}</small>
@@ -503,15 +577,9 @@ export function OptionsApp() {
         <p className="publisher">{message("optionsPublisher")}</p>
       </aside>
       <div className="options-content">
-        <header className="page-heading">
-          <span className="eyebrow">{message("optionsEyebrow")}</span>
-          <h1>{message("optionsHeading")}</h1>
-          <p>{message("optionsIntroduction")}</p>
-        </header>
-
+        <h1 className="sr-only">{message("optionsDocumentTitle")}</h1>
         <Section
           id="speech"
-          eyebrow="01"
           title={message("optionsSpeech")}
           description={message("optionsSpeechDescription")}
         >
@@ -581,21 +649,15 @@ export function OptionsApp() {
                             }));
                           }}
                         />
-                        <button
-                          type="button"
-                          onClick={() =>
+                        <CredentialVisibilityButton
+                          revealed={revealed[provider]}
+                          onToggle={() =>
                             setRevealed((current) => ({
                               ...current,
                               [provider]: !current[provider],
                             }))
                           }
-                        >
-                          {message(
-                            revealed[provider]
-                              ? "optionsHide"
-                              : "optionsReveal",
-                          )}
-                        </button>
+                        />
                       </div>
                     </label>
                     <label className="remember-row">
@@ -882,7 +944,6 @@ export function OptionsApp() {
 
         <Section
           id="reading"
-          eyebrow="02"
           title={message("optionsReading")}
           description={message("optionsReadingDescription")}
         >
@@ -925,7 +986,6 @@ export function OptionsApp() {
 
         <Section
           id="appearance"
-          eyebrow="03"
           title={message("optionsAppearance")}
           description={message("optionsAppearanceDescription")}
         >
@@ -964,7 +1024,6 @@ export function OptionsApp() {
 
         <Section
           id="shortcuts"
-          eyebrow="04"
           title={message("optionsShortcuts")}
           description={message("optionsShortcutsDescription")}
         >
@@ -992,7 +1051,6 @@ export function OptionsApp() {
 
         <Section
           id="privacy"
-          eyebrow="05"
           title={message("optionsPrivacyDiagnostics")}
           description={message("optionsPrivacyDescription")}
         >

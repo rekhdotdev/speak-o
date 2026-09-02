@@ -265,6 +265,8 @@ export function isExtensionMessage(
     background: [
       "extraction.result",
       "extraction.refused",
+      "onboarding.start",
+      "onboarding.complete",
       "activation.start",
       "session.command",
       "session.reconcile",
@@ -282,7 +284,7 @@ export function isExtensionMessage(
     content: [
       "extract.request",
       "onboarding.show",
-      "pending.resume",
+      "onboarding.resume",
       "content.render",
       "content.highlight",
       "content.clear-highlights",

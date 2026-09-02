@@ -64,6 +64,7 @@ const chromeMock = {
     connect: vi.fn(() => settingsPortMock),
     sendMessage: vi.fn(),
     getManifest: vi.fn(() => ({ version: "0.1.0" })),
+    getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
   },
   permissions: {
     request: vi.fn(async () => false),
@@ -119,11 +120,239 @@ describe("options accessibility", () => {
     const view = render(<OptionsApp />);
     expect(
       await screen.findByRole("heading", {
-        name: "Make reading sound like you.",
+        name: "Speech",
       }),
     ).toBeVisible();
+    expect(
+      screen.queryByText("Make reading sound like you."),
+    ).not.toBeInTheDocument();
+    expect(view.container.querySelectorAll(".eyebrow")).toHaveLength(0);
     expect((await axe.run(view.container)).violations).toEqual([]);
   }, 10_000);
+
+  it("guides first run from ordered provider choice through Chrome Voice completion", async () => {
+    chromeMock.tts.getVoices.mockResolvedValue([
+      {
+        voiceName: "Calm Voice",
+        lang: "en-US",
+        eventTypes: ["start", "word", "end"],
+      },
+    ]);
+    chromeMock.runtime.sendMessage.mockImplementation(
+      async (request: Record<string, unknown>) => {
+        if (request.type === "options.get-state") {
+          return {
+            ...activeOptionsState,
+            sessionContext: null,
+            onboarding: { pending: true, narrationLanguage: "en-US" },
+          };
+        }
+        if (request.type === "preferences.patch") {
+          return {
+            ok: true,
+            preferences: {
+              ...DEFAULT_PREFERENCES,
+              ...(request.patch as object),
+            },
+          };
+        }
+        if (request.type === "onboarding.complete") return { ok: true };
+        return undefined;
+      },
+    );
+    vi.stubGlobal("chrome", chromeMock);
+    const user = userEvent.setup();
+    const view = render(<OptionsApp />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Choose a speech provider" }),
+    ).toBeVisible();
+    expect(screen.queryByText(/this Article/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("progressbar", { name: "Setup progress" }),
+    ).toHaveAttribute("aria-valuenow", "1");
+    const providerButtons = screen.getAllByRole("button", {
+      name: /ElevenLabs|Speechify|Chrome Voice/,
+    });
+    expect(providerButtons.map((button) => button.textContent)).toEqual([
+      expect.stringContaining("ElevenLabs"),
+      expect.stringContaining("Speechify"),
+      expect.stringContaining("Chrome Voice"),
+    ]);
+    expect(
+      Array.from(
+        view.container.querySelectorAll("[data-provider-logo]"),
+        (logo) => logo.getAttribute("data-provider-logo"),
+      ),
+    ).toEqual(["elevenlabs", "speechify", "browser"]);
+    expect(
+      view.container.querySelectorAll(".primary-provider-choice"),
+    ).toHaveLength(0);
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /Chrome Voice.*No Provider Credential required/,
+      }),
+    );
+    expect(
+      screen.getByRole("progressbar", { name: "Setup progress" }),
+    ).toHaveAttribute("aria-valuenow", "3");
+    const finish = screen.getByRole("button", {
+      name: "Finish and start listening",
+    });
+    expect(finish).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Chrome Voice" })).toHaveValue(
+      "__unselected__",
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Chrome Voice" }),
+      "Calm Voice",
+    );
+    expect(finish).toBeEnabled();
+    await user.click(finish);
+
+    await waitFor(() =>
+      expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith({
+        version: 1,
+        target: "background",
+        type: "onboarding.complete",
+        provider: "browser",
+      }),
+    );
+    expect((await axe.run(view.container)).violations).toEqual([]);
+  }, 10_000);
+
+  it("checks a cloud connection before requiring a provider Voice", async () => {
+    const audio = document.createElement("audio");
+    const play = vi.spyOn(audio, "play").mockResolvedValue();
+    const pause = vi.spyOn(audio, "pause").mockImplementation(() => undefined);
+    vi.spyOn(audio, "load").mockImplementation(() => undefined);
+    const audioConstructor = vi.fn(function MockAudio() {
+      return audio;
+    });
+    vi.stubGlobal("Audio", audioConstructor);
+    chromeMock.permissions.request.mockResolvedValueOnce(true);
+    chromeMock.runtime.sendMessage.mockImplementation(
+      async (request: Record<string, unknown>) => {
+        if (request.type === "options.get-state") {
+          return {
+            ...activeOptionsState,
+            sessionContext: null,
+            onboarding: { pending: true, narrationLanguage: "en-US" },
+          };
+        }
+        if (request.type === "provider.connect") {
+          return {
+            ok: true,
+            connection: {
+              connected: true,
+              remembered: false,
+              maskedSuffix: "••••1234",
+            },
+            metadata: {
+              voices: [
+                {
+                  id: "voice-rachel",
+                  name: "Rachel",
+                  previewUrl: "https://cdn.example.invalid/rachel.mp3",
+                  labels: {
+                    accent: "american_english",
+                    useCase: "conversational_voice",
+                  },
+                  models: [],
+                },
+              ],
+              models: [],
+            },
+          };
+        }
+        if (request.type === "preferences.patch") {
+          return {
+            ok: true,
+            preferences: {
+              ...DEFAULT_PREFERENCES,
+              ...(request.patch as object),
+            },
+          };
+        }
+        if (request.type === "onboarding.complete") return { ok: true };
+        return undefined;
+      },
+    );
+    vi.stubGlobal("chrome", chromeMock);
+    const user = userEvent.setup();
+    render(<OptionsApp />);
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /ElevenLabs.*Recommended Cloud Voice/,
+      }),
+    );
+    const credential = screen.getByLabelText("Provider Credential");
+    expect(credential).toHaveAttribute("type", "password");
+    const reveal = screen.getByRole("button", { name: "Reveal" });
+    expect(reveal).toHaveTextContent("");
+    await user.click(reveal);
+    expect(credential).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Hide" })).toBeVisible();
+    await user.type(credential, "sk_elevenlabs_1234");
+    await user.click(screen.getByRole("button", { name: "Check connection" }));
+    expect(
+      await screen.findByRole("heading", { name: "Choose a Voice" }),
+    ).toBeVisible();
+
+    const finish = screen.getByRole("button", {
+      name: "Finish and start listening",
+    });
+    expect(finish).toBeDisabled();
+    expect(screen.getByRole("listitem")).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
+    const preview = screen.getByRole("button", {
+      name: "Play Rachel preview using provider media",
+    });
+    expect(preview).toHaveAttribute("aria-pressed", "false");
+    expect(preview).toHaveTextContent("");
+    expect(screen.getByText("American English")).toHaveClass("setup-voice-tag");
+    expect(screen.getByText("Conversational Voice")).toHaveClass(
+      "setup-voice-tag",
+    );
+    await user.click(preview);
+    expect(audioConstructor).toHaveBeenCalledOnce();
+    expect(audio.preload).toBe("none");
+    expect(audio.src).toBe("https://cdn.example.invalid/rachel.mp3");
+    expect(play).toHaveBeenCalledOnce();
+    const pausePreview = screen.getByRole("button", {
+      name: "Pause Rachel preview",
+    });
+    expect(pausePreview).toHaveAttribute("aria-pressed", "true");
+    await user.click(pausePreview);
+    expect(pause).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /Rachel.*Choose/ }));
+    expect(finish).toBeEnabled();
+    expect(screen.getByRole("img", { name: "Rachel selected" })).toHaveClass(
+      "setup-voice-selected",
+    );
+    expect(screen.getByRole("listitem").getAttribute("data-selected")).toBe(
+      "true",
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: "Play Rachel preview using provider media",
+      }),
+    ).not.toBeInTheDocument();
+    await user.click(finish);
+
+    await waitFor(() =>
+      expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith({
+        version: 1,
+        target: "background",
+        type: "onboarding.complete",
+        provider: "elevenlabs",
+      }),
+    );
+  });
 
   it("uses localized accessibility names and bidi direction", async () => {
     chromeMock.i18n.getMessage.mockImplementation((key) => {

@@ -78,11 +78,32 @@ const PROVIDER_METADATA_KEYS: Record<CloudProviderId, string> = {
   speechify: "speechifyMetadata",
 };
 const FIRST_USE_KEY = "firstUseComplete";
-const PENDING_CLOUD_KEY = "pendingCloudActivation";
+const PENDING_ONBOARDING_KEY = "pendingOnboarding";
 
 interface ContentTarget {
   tabId: number;
   frameId: number;
+}
+
+interface PendingOnboarding {
+  target: ContentTarget;
+  narrationLanguage: string;
+  firstRun: boolean;
+}
+
+function isPendingOnboarding(value: unknown): value is PendingOnboarding {
+  return (
+    isRecord(value) &&
+    isRecord(value.target) &&
+    Number.isSafeInteger(value.target.tabId) &&
+    (value.target.tabId as number) >= 0 &&
+    Number.isSafeInteger(value.target.frameId) &&
+    (value.target.frameId as number) >= 0 &&
+    typeof value.narrationLanguage === "string" &&
+    value.narrationLanguage.length > 0 &&
+    value.narrationLanguage.length <= 35 &&
+    typeof value.firstRun === "boolean"
+  );
 }
 
 function storageArea(area: chrome.storage.StorageArea): ExtensionStorageArea {
@@ -867,7 +888,7 @@ export default defineBackground(() => {
     provider: SpeechProviderId,
   ) => {
     recoveryDescriptor = null;
-    await chrome.storage.session.remove(PENDING_CLOUD_KEY);
+    await chrome.storage.session.remove(PENDING_ONBOARDING_KEY);
     const replacedSessionId = controller.currentSnapshot()?.id ?? null;
     emitDebug(
       "background",
@@ -1009,13 +1030,11 @@ export default defineBackground(() => {
       credentials.describe("speechify"),
       preferences.load(),
     ]);
-    const connections = {
-      elevenlabs: elevenLabsConnection.connected,
-      speechify: speechifyConnection.connected,
-    };
     const defaultConnected =
       currentPreferences.defaultProvider === "browser" ||
-      connections[currentPreferences.defaultProvider];
+      (currentPreferences.defaultProvider === "elevenlabs"
+        ? elevenLabsConnection.connected
+        : speechifyConnection.connected);
     if (!firstUse || !defaultConnected) {
       emitDebug(
         "background",
@@ -1023,14 +1042,14 @@ export default defineBackground(() => {
         {
           firstUse: Boolean(firstUse),
           defaultProvider: currentPreferences.defaultProvider,
-          elevenLabsConnected: connections.elevenlabs,
-          speechifyConnected: connections.speechify,
+          elevenLabsConnected: elevenLabsConnection.connected,
+          speechifyConnected: speechifyConnection.connected,
         },
         target,
       );
       await sendToContent(target, {
         type: "onboarding.show",
-        connections,
+        firstRun: !firstUse,
       });
       return;
     }
@@ -1439,6 +1458,25 @@ export default defineBackground(() => {
           }
         })();
       } else if (
+        message.type === "onboarding.start" &&
+        senderTarget &&
+        typeof message.narrationLanguage === "string" &&
+        message.narrationLanguage.length > 0 &&
+        message.narrationLanguage.length <= 35
+      ) {
+        void (async () => {
+          const stored = await chrome.storage.local.get(FIRST_USE_KEY);
+          const pending: PendingOnboarding = {
+            target: senderTarget,
+            narrationLanguage: message.narrationLanguage as string,
+            firstRun: !stored[FIRST_USE_KEY],
+          };
+          await chrome.storage.session.set({
+            [PENDING_ONBOARDING_KEY]: pending,
+          });
+          await chrome.runtime.openOptionsPage();
+        })();
+      } else if (
         message.type === "activation.start" &&
         senderTarget &&
         isArticleSnapshot(message.article) &&
@@ -1455,7 +1493,11 @@ export default defineBackground(() => {
               !(await credentials.describe(provider)).connected
             ) {
               await chrome.storage.session.set({
-                [PENDING_CLOUD_KEY]: { target: senderTarget, provider },
+                [PENDING_ONBOARDING_KEY]: {
+                  target: senderTarget,
+                  narrationLanguage: article.narrationLanguage,
+                  firstRun: false,
+                } satisfies PendingOnboarding,
               });
               await chrome.runtime.openOptionsPage();
               return;
@@ -1690,12 +1732,15 @@ export default defineBackground(() => {
             speechifyConnection,
             storedMetadata,
             currentPreferences,
+            pendingOnboarding,
           ] = await Promise.all([
             credentials.describe("elevenlabs"),
             credentials.describe("speechify"),
             chrome.storage.local.get(Object.values(PROVIDER_METADATA_KEYS)),
             preferences.load(),
+            chrome.storage.session.get(PENDING_ONBOARDING_KEY),
           ]);
+          const pending = pendingOnboarding[PENDING_ONBOARDING_KEY];
           sendResponse({
             connections: {
               elevenlabs: elevenLabsConnection,
@@ -1721,6 +1766,13 @@ export default defineBackground(() => {
                   }
                 : null;
             })(),
+            onboarding:
+              isPendingOnboarding(pending) && pending.firstRun
+                ? {
+                    pending: true,
+                    narrationLanguage: pending.narrationLanguage,
+                  }
+                : { pending: false },
             diagnosticsEvidence: (() => {
               const snapshot = controller.currentSnapshot();
               return snapshot && activeArticle?.sessionId === snapshot.id
@@ -1732,6 +1784,91 @@ export default defineBackground(() => {
             })(),
             ...(DEBUG_MODE ? { debugLog: debug.format() } : {}),
           });
+        })();
+        return true;
+      } else if (
+        message.type === "onboarding.complete" &&
+        isSpeechProviderId(message.provider)
+      ) {
+        void (async () => {
+          const stored = await chrome.storage.session.get(
+            PENDING_ONBOARDING_KEY,
+          );
+          const pending = stored[PENDING_ONBOARDING_KEY];
+          if (!isPendingOnboarding(pending)) {
+            sendResponse({
+              ok: false,
+              message: localizedMessage("setupFinishFailed"),
+            });
+            return;
+          }
+
+          const provider = message.provider as SpeechProviderId;
+          if (
+            provider !== "browser" &&
+            !(await credentials.describe(provider)).connected
+          ) {
+            sendResponse({
+              ok: false,
+              message: localizedMessage("optionsNotConnected"),
+            });
+            return;
+          }
+
+          const currentPreferences = await preferences.load();
+          if (provider !== "browser") {
+            const providerSettings =
+              provider === "elevenlabs"
+                ? currentPreferences.elevenLabs
+                : currentPreferences.speechify;
+            const baseLanguage =
+              pending.narrationLanguage.split("-")[0] ??
+              pending.narrationLanguage;
+            const configuredVoice =
+              providerSettings.voiceByLanguage[pending.narrationLanguage] ??
+              providerSettings.voiceByLanguage[baseLanguage];
+            if (!configuredVoice) {
+              sendResponse({
+                ok: false,
+                message: localizedMessage("sessionNoticeVoiceRequired"),
+              });
+              return;
+            }
+          }
+
+          await preferences.patch({ defaultProvider: provider });
+          const delivered = await sendToContent(pending.target, {
+            type: "onboarding.resume",
+            provider,
+          });
+          if (!delivered) {
+            sendResponse({
+              ok: false,
+              message: localizedMessage("setupFinishFailed"),
+            });
+            return;
+          }
+
+          sendResponse({ ok: true });
+          try {
+            const sourceTab = await chrome.tabs.get(pending.target.tabId);
+            await chrome.tabs.update(pending.target.tabId, { active: true });
+            if (sourceTab.windowId !== undefined) {
+              await chrome.windows.update(sourceTab.windowId, {
+                focused: true,
+              });
+            }
+            if (
+              sender.tab?.id !== undefined &&
+              sender.tab.id !== pending.target.tabId
+            ) {
+              await chrome.tabs.remove(sender.tab.id);
+            }
+          } catch (error) {
+            emitDebug("background", "onboarding.return.error", {
+              error: summarizeDebugError(error),
+            });
+          }
         })();
         return true;
       } else if (
@@ -1826,26 +1963,6 @@ export default defineBackground(() => {
               metadata: providerMetadata,
               ...(DEBUG_MODE ? { debugLog: debug.format() } : {}),
             });
-            const pendingValue = (
-              await chrome.storage.session.get(PENDING_CLOUD_KEY)
-            )[PENDING_CLOUD_KEY];
-            const pending =
-              isRecord(pendingValue) &&
-              isRecord(pendingValue.target) &&
-              pendingValue.provider === provider
-                ? (pendingValue.target as unknown as ContentTarget)
-                : null;
-            if (
-              pending &&
-              Number.isSafeInteger(pending.tabId) &&
-              Number.isSafeInteger(pending.frameId)
-            ) {
-              await sendToContent(pending, {
-                type: "pending.resume",
-                provider,
-              });
-              await chrome.storage.session.remove(PENDING_CLOUD_KEY);
-            }
           } catch (error) {
             const errorCode =
               isRecord(error) && typeof error.code === "string"
@@ -1966,7 +2083,7 @@ export default defineBackground(() => {
     void chrome.storage.session.remove([
       SESSION_DESCRIPTOR_KEY,
       SESSION_BUFFER_KEY,
-      PENDING_CLOUD_KEY,
+      PENDING_ONBOARDING_KEY,
     ]);
   });
 });

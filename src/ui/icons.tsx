@@ -58,6 +58,14 @@ export function PauseIcon() {
   );
 }
 
+export function CheckIcon() {
+  return (
+    <Icon>
+      <path d="m6.5 12.5 3.5 3.5 7.5-8" />
+    </Icon>
+  );
+}
+
 export function MoreIcon() {
   return (
     <Icon>
@@ -103,6 +111,25 @@ export function SettingsIcon() {
     <Icon>
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" />
+    </Icon>
+  );
+}
+
+export function EyeIcon() {
+  return (
+    <Icon>
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </Icon>
+  );
+}
+
+export function EyeOffIcon() {
+  return (
+    <Icon>
+      <path d="m3 3 18 18" />
+      <path d="M10.6 6.2Q11.3 6 12 6c6 0 9.5 6 9.5 6a14 14 0 0 1-2.2 2.8M6.8 7.8A15 15 0 0 0 2.5 12s3.5 6 9.5 6q1.9 0 3.5-.8" />
+      <path d="M10.2 10.2a2.5 2.5 0 0 0 3.6 3.6" />
     </Icon>
   );
 }

@@ -146,16 +146,11 @@ select {
 }
 
 .brand-mark {
-  display: inline-grid;
-  place-items: center;
   inline-size: 32px;
   block-size: 32px;
   flex: none;
-  color: white;
-  font-weight: 700;
-  background: var(--accent);
   border-radius: 10px;
-  box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.16);
+  box-shadow: 0 0 0 1px oklch(0 0 0 / 0.1);
 }
 
 .icon-button,
@@ -418,25 +413,30 @@ input:focus-visible {
 }
 
 .onboarding {
-  inline-size: min(560px, calc(100vw - 24px));
-  gap: 16px;
-  padding: 22px;
+  display: flex;
+  align-items: center;
+  inline-size: min(620px, calc(100vw - 24px));
+  gap: 12px;
+  padding: 12px;
 }
-.onboarding h2 {
-  margin: 6px 0 8px;
-  font-size: 22px;
-  line-height: 1.15;
+.onboarding-mark {
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: 12px;
+}
+.onboarding-copy {
+  display: grid;
+  min-inline-size: 0;
+  flex: 1;
+  gap: 2px;
+}
+.onboarding-copy strong {
   text-wrap: balance;
 }
-.onboarding p {
-  margin: 0;
+.onboarding-copy span {
   color: var(--muted);
+  font-size: 13px;
   text-wrap: pretty;
-}
-.onboarding-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 .primary-button,
 .secondary-button {
@@ -486,6 +486,19 @@ input:focus-visible {
   .voice-button,
   .detail-row {
     border-color: oklch(1 0 0 / 0.1);
+  }
+}
+
+@media (max-width: 520px) {
+  .onboarding {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .onboarding-copy {
+    flex-basis: calc(100% - 52px);
+  }
+  .onboarding .primary-button {
+    inline-size: 100%;
   }
 }
 

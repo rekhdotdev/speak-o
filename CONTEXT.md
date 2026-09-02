@@ -28,6 +28,10 @@ _Avoid_: Website, active tab
 The single active spoken reading of one Article Snapshot or Selection across the browser. Its Speech Provider is chosen explicitly and remains fixed unless the user switches to Browser Voice Mode. It continues across tab switches and ends when another Reading Session starts, the user stops it, or the source page navigates or closes.
 _Avoid_: Playback, audio session
 
+**First-run Setup**:
+The guided configuration shown before the first Reading Session, where a user chooses a Speech Provider, establishes any required Provider Connection, and selects a Voice. Completing it returns to the pending Source Page and starts reading; later configuration uses Settings.
+_Avoid_: Welcome tour, marketing onboarding
+
 **Reading Position**:
 The current sentence within an Article Snapshot or Selection. It is a content position rather than an audio timestamp.
 _Avoid_: Playback time, audio position
