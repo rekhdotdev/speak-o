@@ -1,12 +1,31 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { DEFAULT_PREFERENCES } from "../../src/storage/preferences";
 import { OptionsApp } from "../../src/ui/OptionsApp";
 
+let settingsMessageListener: ((message: unknown) => void) | undefined;
+
 const settingsPortMock = {
   disconnect: vi.fn(),
   postMessage: vi.fn(),
+};
+
+const runtimeMessageMock = {
+  addListener: vi.fn((listener: (message: unknown) => void) => {
+    settingsMessageListener = listener;
+  }),
+  removeListener: vi.fn((listener: (message: unknown) => void) => {
+    if (settingsMessageListener === listener) {
+      settingsMessageListener = undefined;
+    }
+  }),
 };
 
 const activeOptionsState = {
@@ -54,6 +73,10 @@ const chromeMock = {
   commands: {
     getAll: vi.fn(async () => [
       {
+        name: "_execute_action",
+        shortcut: "",
+      },
+      {
         name: "read-article",
         description: "Read Article",
         shortcut: "Alt+Shift+R",
@@ -62,8 +85,9 @@ const chromeMock = {
   },
   runtime: {
     connect: vi.fn(() => settingsPortMock),
+    onMessage: runtimeMessageMock,
     sendMessage: vi.fn(),
-    getManifest: vi.fn(() => ({ version: "0.1.0" })),
+    getManifest: vi.fn(() => ({ version: "1.0.0" })),
     getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
   },
   permissions: {
@@ -105,7 +129,10 @@ describe("options accessibility", () => {
       },
     );
     chromeMock.i18n.getMessage.mockImplementation((_key: string) => "");
+    settingsMessageListener = undefined;
     settingsPortMock.postMessage.mockClear();
+    runtimeMessageMock.addListener.mockClear();
+    runtimeMessageMock.removeListener.mockClear();
     storageChangedMock.addListener.mockClear();
     storageChangedMock.removeListener.mockClear();
     chromeMock.tts.getVoices.mockResolvedValue([]);
@@ -117,6 +144,7 @@ describe("options accessibility", () => {
 
   it("has landmark, label, and control semantics without automated violations", async () => {
     vi.stubGlobal("chrome", chromeMock);
+    const user = userEvent.setup();
     const view = render(<OptionsApp />);
     expect(
       await screen.findByRole("heading", {
@@ -126,7 +154,56 @@ describe("options accessibility", () => {
     expect(
       screen.queryByText("Make reading sound like you."),
     ).not.toBeInTheDocument();
+    for (const removedDescription of [
+      "Select how Speak-O turns an Article into a controlled spoken experience.",
+      "Keep Reading Position and visual orientation under your control.",
+      "Use a neutral interface that stays independent from the Source Page.",
+      "Chrome owns global assignments and reports conflicts or missing keys.",
+      "Review the hosted policy or copy locally generated, redacted diagnostics.",
+    ]) {
+      expect(screen.queryByText(removedDescription)).not.toBeInTheDocument();
+    }
     expect(view.container.querySelectorAll(".eyebrow")).toHaveLength(0);
+    expect(screen.getByRole("link", { name: "Speech" })).toHaveAttribute(
+      "aria-current",
+      "location",
+    );
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(
+      screen.getByRole("tab", { name: /Chrome Voice.*default/i }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
+    expect(
+      screen.queryByLabelText("Provider Credential"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "ElevenLabs" }));
+    expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
+    expect(
+      screen.queryByLabelText("Advanced API Region"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Model")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("searchbox", { name: "Search Voices" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Provider Credential")).toHaveAttribute(
+      "placeholder",
+      "Paste your ElevenLabs API key",
+    );
+    expect(
+      screen.queryByText(
+        "Chrome profile storage protects a remembered key; Speak-O does not add application-level encryption.",
+      ),
+    ).not.toBeInTheDocument();
+    const providerWorkspace = view.container.querySelector(
+      ".provider-workspace",
+    );
+    expect(
+      providerWorkspace?.querySelector(":scope > .provider-tabs"),
+    ).not.toBeNull();
+    expect(
+      providerWorkspace?.querySelector(":scope > [role='tabpanel']"),
+    ).not.toBeNull();
     expect(
       screen.getByRole("link", {
         name: "How to get an API key from ElevenLabs (opens in a new tab)",
@@ -135,6 +212,9 @@ describe("options accessibility", () => {
       "href",
       "https://elevenlabs.io/docs/eleven-api/quickstart",
     );
+
+    await user.click(screen.getByRole("tab", { name: "Speechify" }));
+    expect(screen.queryByText("Connect ElevenLabs")).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", {
         name: "How to get an API key from Speechify (opens in a new tab)",
@@ -143,8 +223,35 @@ describe("options accessibility", () => {
       "href",
       "https://docs.sws.speechify.com/text-to-speech/get-started/quickstart",
     );
+    expect(
+      screen.getByRole("link", {
+        name: "Read the Speak-O privacy policy on rekh.dev",
+      }),
+    ).toHaveAttribute("href", "https://rekh.dev/speak-o/privacy/");
+    expect(
+      screen.queryByText("Open source software published by Rekh."),
+    ).not.toBeInTheDocument();
+    const publisher = screen.getByRole("link", { name: "Published by Rekh" });
+    expect(publisher).toHaveAttribute("href", "https://rekh.dev/");
+    expect(publisher.querySelector("img")).toHaveAttribute(
+      "src",
+      "chrome-extension://test/brand/rekh-favicon.svg",
+    );
+    expect(screen.getByText("Apache-2.0")).toBeVisible();
+    expect(
+      screen.queryByText("No Speak-O account required"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Read this Article with Speak-O")).toBeVisible();
+    expect(screen.getByText("Toolbar action")).toBeVisible();
+    expect(screen.queryByText("_execute_action")).not.toBeInTheDocument();
+    expect(screen.getByText("Version 1.0.0")).toBeVisible();
+    await user.click(screen.getByRole("link", { name: "Appearance" }));
+    expect(screen.getByRole("link", { name: "Appearance" })).toHaveAttribute(
+      "aria-current",
+      "location",
+    );
     expect((await axe.run(view.container)).violations).toEqual([]);
-  }, 10_000);
+  }, 20_000);
 
   it("uses the onboarding preview and selection behavior in later settings", async () => {
     const audio = document.createElement("audio");
@@ -216,6 +323,10 @@ describe("options accessibility", () => {
     const user = userEvent.setup();
     const view = render(<OptionsApp />);
 
+    await user.click(await screen.findByRole("tab", { name: "ElevenLabs" }));
+    expect(screen.getByLabelText("Advanced API Region")).toBeVisible();
+    expect(screen.getByLabelText("Model")).toBeVisible();
+
     const rachelSelected = await screen.findByRole("img", {
       name: "Rachel selected",
     });
@@ -226,6 +337,11 @@ describe("options accessibility", () => {
     );
     expect(screen.getByText("American English")).toHaveClass("voice-tag");
     expect(screen.getByText("Conversational Voice")).toHaveClass("voice-tag");
+    expect(
+      screen
+        .getByRole("list", { name: "Available ElevenLabs Voices" })
+        .closest(".provider-workspace"),
+    ).not.toBeNull();
 
     const preview = screen.getByRole("button", {
       name: "Play Adam preview using provider media",
@@ -246,8 +362,15 @@ describe("options accessibility", () => {
       screen.getByRole("button", { name: "Pause Adam preview" }),
     ).toHaveAttribute("aria-pressed", "true");
 
+    await user.click(screen.getByRole("tab", { name: "Speechify" }));
+    await waitFor(() => expect(pause).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: "Pause Adam preview" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "ElevenLabs" }));
+
     const search = screen.getByRole("searchbox", {
-      name: "Search Voices · ElevenLabs",
+      name: "Search Voices",
     });
     await user.type(search, "no match");
     expect(
@@ -267,7 +390,7 @@ describe("options accessibility", () => {
       "true",
     );
     expect((await axe.run(view.container)).violations).toEqual([]);
-  }, 10_000);
+  }, 20_000);
 
   it("guides first run from ordered provider choice through Chrome Voice completion", async () => {
     chromeMock.tts.getVoices.mockResolvedValue([
@@ -360,6 +483,28 @@ describe("options accessibility", () => {
     );
     expect((await axe.run(view.container)).violations).toEqual([]);
   }, 10_000);
+
+  it("enters first-run setup when an already-open Options page is notified", async () => {
+    vi.stubGlobal("chrome", chromeMock);
+    render(<OptionsApp />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Speech" }),
+    ).toBeVisible();
+
+    act(() => {
+      settingsMessageListener?.({
+        version: 1,
+        target: "options",
+        type: "onboarding.requested",
+        narrationLanguage: "en-US",
+      });
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Choose a speech provider" }),
+    ).toBeVisible();
+  });
 
   it("checks a cloud connection before requiring a provider Voice", async () => {
     const audio = document.createElement("audio");
@@ -555,6 +700,44 @@ describe("options accessibility", () => {
     });
   });
 
+  it("selects a provider workspace separately from making it the default", async () => {
+    vi.stubGlobal("chrome", chromeMock);
+    const user = userEvent.setup();
+    render(<OptionsApp />);
+
+    const elevenLabsTab = await screen.findByRole("tab", {
+      name: "ElevenLabs",
+    });
+    await user.click(elevenLabsTab);
+    expect(elevenLabsTab).toHaveAttribute("aria-selected", "true");
+    expect(chromeMock.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "preferences.patch" }),
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Use ElevenLabs as the default provider",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "preferences.patch",
+          patch: { defaultProvider: "elevenlabs" },
+        }),
+      ),
+    );
+    expect(await screen.findByText("Default provider")).toBeVisible();
+
+    elevenLabsTab.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Speechify" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
   it("connects Speechify with its own host permission and provider identity", async () => {
     chromeMock.permissions.request.mockResolvedValueOnce(true);
     chromeMock.runtime.sendMessage.mockImplementation(
@@ -577,10 +760,9 @@ describe("options accessibility", () => {
     const user = userEvent.setup();
     render(<OptionsApp />);
 
-    const credentialInputs = await screen.findAllByLabelText(
-      "Provider Credential",
-    );
-    await user.type(credentialInputs[1]!, "sk_speechify_5678");
+    await user.click(await screen.findByRole("tab", { name: "Speechify" }));
+    const credentialInput = screen.getByLabelText("Provider Credential");
+    await user.type(credentialInput, "sk_speechify_5678");
     await user.click(screen.getByRole("button", { name: "Connect Speechify" }));
 
     expect(chromeMock.permissions.request).toHaveBeenCalledWith({

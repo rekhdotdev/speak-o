@@ -5,7 +5,7 @@ Speak-O generates diagnostics locally only after the user chooses **Copy redacte
 ```json
 {
   "version": 1,
-  "extensionVersion": "0.1.0",
+  "extensionVersion": "1.0.0",
   "extractor": "generic",
   "extractionStage": "ready",
   "mappedBlockCount": 12,

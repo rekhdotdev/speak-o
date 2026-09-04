@@ -299,10 +299,7 @@ export function OnboardingWizard({
                     setRememberOnDevice(event.currentTarget.checked)
                   }
                 />
-                <span>
-                  <strong>{message("optionsRememberDevice")}</strong>
-                  <small>{message("optionsRememberDescription")}</small>
-                </span>
+                <strong>{message("optionsRememberDevice")}</strong>
               </label>
             </div>
             <div className="setup-actions">

@@ -173,6 +173,22 @@ describe("runtime message contract", () => {
         type: "content.debug.snapshot",
       }),
     ).toBe(true);
+    expect(
+      isExtensionMessage({
+        version: 1,
+        target: "options",
+        type: "onboarding.requested",
+        narrationLanguage: "en-US",
+      }),
+    ).toBe(true);
+    expect(
+      isExtensionMessage({
+        version: 1,
+        target: "options",
+        type: "onboarding.requested",
+        narrationLanguage: "",
+      }),
+    ).toBe(false);
   });
 
   it("validates recovered descriptors and bounded session audio", () => {

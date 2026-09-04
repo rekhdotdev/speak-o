@@ -173,14 +173,16 @@
   "optionsRootMissing": { "message": "Options root is missing" },
   "optionsLoading": { "message": "Loading Speak-O…" },
   "optionsHomeLabel": { "message": "Speak-O settings home" },
-  "optionsPublicBetaVersion": { "message": "Public beta · 0.1.0" },
+  "optionsVersion": {
+    "message": "Version $version$",
+    "placeholders": { "version": { "content": "$1", "example": "1.0.0" } }
+  },
   "optionsSectionsLabel": { "message": "Settings sections" },
   "optionsSpeech": { "message": "Speech" },
   "optionsReading": { "message": "Reading" },
   "optionsAppearance": { "message": "Appearance" },
   "optionsShortcuts": { "message": "Shortcuts" },
   "optionsPrivacyDiagnostics": { "message": "Privacy & diagnostics" },
-  "optionsPublisher": { "message": "Open-source software published by Rekh." },
   "setupTitle": { "message": "Set up Speak-O" },
   "setupIntroduction": {
     "message": "Choose your default speech provider and Voice. You can change them later in Settings."
@@ -242,9 +244,6 @@
   "setupFinishFailed": {
     "message": "Setup could not return to the Article. Keep this page open and try again."
   },
-  "optionsSpeechDescription": {
-    "message": "Select how Speak-O turns an Article into a controlled spoken experience."
-  },
   "optionsElevenLabsCloudVoice": { "message": "ElevenLabs Cloud Voice" },
   "optionsSpeechifyCloudVoice": { "message": "Speechify Cloud Voice" },
   "optionsDirectByok": { "message": "Direct BYOK connection" },
@@ -278,18 +277,28 @@
   "optionsHide": { "message": "Hide" },
   "optionsReveal": { "message": "Reveal" },
   "optionsRememberDevice": { "message": "Remember on this device" },
-  "optionsRememberDescription": {
-    "message": "Chrome profile storage protects a remembered key; Speak-O does not add application-level encryption."
-  },
   "optionsConnecting": { "message": "Connecting…" },
   "optionsConnectElevenLabs": { "message": "Connect ElevenLabs" },
   "optionsConnectSpeechify": { "message": "Connect Speechify" },
   "optionsNarrationLanguage": { "message": "Narration Language" },
   "optionsDetectLanguage": { "message": "Detect from each Article" },
-  "optionsDefaultVoiceMode": { "message": "Default Voice Mode" },
-  "optionsDefaultProvider": { "message": "Default Speech Provider" },
+  "optionsProviderTabsLabel": { "message": "Speech providers" },
+  "optionsDefault": { "message": "Default" },
+  "optionsDefaultProviderBadge": { "message": "Default provider" },
+  "optionsDefaultProviderTabLabel": {
+    "message": "$provider$, default provider",
+    "placeholders": {
+      "provider": { "content": "$1", "example": "ElevenLabs" }
+    }
+  },
+  "optionsUseAsDefault": { "message": "Use as default" },
+  "optionsUseProviderByDefault": {
+    "message": "Use $provider$ as the default provider",
+    "placeholders": {
+      "provider": { "content": "$1", "example": "ElevenLabs" }
+    }
+  },
   "optionsChromeVoice": { "message": "Chrome Voice" },
-  "optionsCloudVoice": { "message": "Cloud Voice" },
   "optionsAutomaticVoice": {
     "message": "Automatic · word highlighting when supported · $language$",
     "placeholders": { "language": { "content": "$1", "example": "en-US" } }
@@ -327,9 +336,6 @@
     "message": "$voice$ selected",
     "placeholders": { "voice": { "content": "$1", "example": "Rachel" } }
   },
-  "optionsReadingDescription": {
-    "message": "Keep Reading Position and visual orientation under your control."
-  },
   "optionsHighlightActive": { "message": "Highlight active text" },
   "optionsHighlightDescription": {
     "message": "Use exact CSS Highlight ranges on the original Source Page."
@@ -343,9 +349,6 @@
     "message": "Pause before submitting more source characters in one Cloud Voice Reading Session."
   },
   "optionsDisabled": { "message": "Disabled" },
-  "optionsAppearanceDescription": {
-    "message": "Use a neutral interface that stays independent from the Source Page."
-  },
   "optionsTheme": { "message": "Theme" },
   "optionsThemeSystem": { "message": "System" },
   "optionsThemeLight": { "message": "Light" },
@@ -353,27 +356,19 @@
   "optionsFloatingDock": { "message": "Floating bar dock" },
   "optionsDockBottom": { "message": "Bottom center" },
   "optionsDockTop": { "message": "Top center" },
-  "optionsShortcutsDescription": {
-    "message": "Chrome owns global assignments and reports conflicts or missing keys."
-  },
   "optionsNotAssigned": { "message": "Not assigned" },
   "optionsOpenShortcuts": { "message": "Open Chrome extension shortcuts" },
-  "optionsPrivacyDescription": {
-    "message": "Speak-O keeps Rekh outside the Article and Provider Credential data path."
+  "optionsToolbarAction": { "message": "Toolbar action" },
+  "optionsPrivacyPolicyLink": {
+    "message": "Read the Speak-O privacy policy on rekh.dev"
   },
-  "optionsPrivacySummary": {
-    "message": "Rekh receives no Article text, Provider Credentials, Provider Usage, diagnostics, or behavioral data."
-  },
-  "optionsPrivacyDetail": {
-    "message": "Chrome Voice Mode creates no Speech Provider request from Speak-O. Cloud Voice Mode sends only the submitted source text directly to your selected provider using its credential. Preferences stay in local extension storage; active audio uses session storage and is cleared by Chrome when the extension session ends."
-  },
-  "optionsElevenLabsPrivacy": { "message": "Read ElevenLabs privacy material" },
-  "optionsSpeechifyPrivacy": { "message": "Read Speechify privacy material" },
   "optionsCopyDiagnostics": { "message": "Copy redacted diagnostics" },
-  "optionsFooterTitle": { "message": "Speak-O 0.1.0 public beta" },
-  "optionsFooterDetail": {
-    "message": "Apache-2.0 · Published by Rekh · No Speak-O account required"
+  "optionsFooterTitle": {
+    "message": "Speak-O $version$",
+    "placeholders": { "version": { "content": "$1", "example": "1.0.0" } }
   },
+  "optionsLicense": { "message": "Apache-2.0" },
+  "optionsPublishedByRekh": { "message": "Published by Rekh" },
   "optionsPreferencesSaved": { "message": "Preferences saved locally." },
   "optionsPreferencesSaveFailed": {
     "message": "Preferences could not be saved. Try again."

@@ -360,10 +360,81 @@ test("unpacked extension activates and renders deterministic core states", async
       await expect(
         settingsPage.getByText("Make reading sound like you."),
       ).toHaveCount(0);
+      await expect(
+        settingsPage.getByText(
+          "Select how Speak-O turns an Article into a controlled spoken experience.",
+        ),
+      ).toHaveCount(0);
       await expect(settingsPage.locator(".eyebrow")).toHaveCount(0);
       await expect(
         settingsPage.getByRole("img", { name: "speak-o" }),
       ).toBeVisible();
+      await expect(settingsPage.getByText("Version 1.0.0")).toBeVisible();
+      await expect(
+        settingsPage.getByRole("link", { name: "Speech" }),
+      ).toHaveAttribute("aria-current", "location");
+      await expect(
+        settingsPage.getByRole("link", { name: "Speech" }),
+      ).toHaveCSS("border-left-width", "0px");
+      await settingsPage.emulateMedia({ reducedMotion: "no-preference" });
+      for (const destination of ["#appearance", "#speech"]) {
+        const selectedSections = await settingsPage.evaluate(
+          async (destinationHash) => {
+            document
+              .querySelector<HTMLAnchorElement>(
+                `nav a[href='${destinationHash}']`,
+              )
+              ?.click();
+            const samples: string[] = [];
+            for (let frame = 0; frame < 45; frame += 1) {
+              await new Promise<void>((resolve) =>
+                requestAnimationFrame(() => resolve()),
+              );
+              samples.push(
+                document
+                  .querySelector<HTMLAnchorElement>(
+                    'nav a[aria-current="location"]',
+                  )
+                  ?.getAttribute("href") ?? "",
+              );
+            }
+            return [...new Set(samples)];
+          },
+          destination,
+        );
+        expect(selectedSections).toEqual([destination]);
+      }
+      await expect(settingsPage.getByRole("tabpanel")).toHaveCount(1);
+      await expect(
+        settingsPage.getByRole("tab", { name: /Chrome Voice.*default/i }),
+      ).toHaveAttribute("aria-selected", "true");
+      const speechSectionLayout = await settingsPage
+        .locator("#speech")
+        .evaluate((section) => {
+          const heading = section.querySelector(".section-heading");
+          const content = section.querySelector(".section-content");
+          if (!heading || !content) return null;
+          const headingRect = heading.getBoundingClientRect();
+          const contentRect = content.getBoundingClientRect();
+          return {
+            contentWidth: contentRect.width,
+            leftAligned: Math.abs(headingRect.left - contentRect.left) < 1,
+            stacked: headingRect.bottom <= contentRect.top,
+          };
+        });
+      expect(speechSectionLayout).toEqual({
+        contentWidth: 708,
+        leftAligned: true,
+        stacked: true,
+      });
+      await settingsPage.getByRole("tab", { name: "Speechify" }).click();
+      await expect(settingsPage.getByLabel("Advanced API Region")).toHaveCount(
+        0,
+      );
+      await expect(settingsPage.getByLabel("Model")).toHaveCount(0);
+      await expect(
+        settingsPage.getByRole("searchbox", { name: "Search Voices" }),
+      ).toHaveCount(0);
       await expect(
         settingsPage.getByRole("link", {
           name: "How to get an API key from Speechify (opens in a new tab)",
@@ -372,9 +443,131 @@ test("unpacked extension activates and renders deterministic core states", async
         "href",
         "https://docs.sws.speechify.com/text-to-speech/get-started/quickstart",
       );
+      await expect(
+        settingsPage.getByLabel("Provider Credential"),
+      ).toHaveAttribute("placeholder", "Paste your Speechify API key");
+      await expect(
+        settingsPage.getByText(
+          "Chrome profile storage protects a remembered key; Speak-O does not add application-level encryption.",
+        ),
+      ).toHaveCount(0);
+      await expect(
+        settingsPage.locator(".provider-workspace > .provider-tabs"),
+      ).toHaveCount(1);
+      await expect(
+        settingsPage.locator(".provider-workspace > [role='tabpanel']"),
+      ).toHaveCount(1);
+      await expect(
+        settingsPage.getByRole("checkbox", { name: "Remember on this device" }),
+      ).toHaveCSS("border-radius", "6px");
+      await expect(
+        settingsPage.getByRole("checkbox", { name: "Remember on this device" }),
+      ).toHaveCSS("appearance", "none");
+      await expect(settingsPage.locator(".remember-row")).toHaveCSS(
+        "gap",
+        "10px",
+      );
+      await expect(
+        settingsPage.getByText("Open source software published by Rekh."),
+      ).toHaveCount(0);
+      await expect(
+        settingsPage.getByRole("link", { name: "Published by Rekh" }),
+      ).toHaveAttribute("href", "https://rekh.dev/");
+      await expect(settingsPage.getByText("Apache-2.0")).toBeVisible();
+      await expect(
+        settingsPage.getByText("No Speak-O account required"),
+      ).toHaveCount(0);
+      await expect(
+        settingsPage.getByRole("link", {
+          name: "Read the Speak-O privacy policy on rekh.dev",
+        }),
+      ).toHaveAttribute("href", "https://rekh.dev/speak-o/privacy/");
       await capture(settingsPage, testInfo, "08-functional-settings");
+      await settingsPage
+        .locator("#appearance")
+        .evaluate((section) => section.scrollIntoView({ block: "start" }));
+      await expect(
+        settingsPage.getByRole("link", { name: "Appearance" }),
+      ).toHaveAttribute("aria-current", "location");
+
+      for (const viewport of [
+        { width: 820, height: 800 },
+        { width: 390, height: 800 },
+      ]) {
+        await settingsPage.setViewportSize(viewport);
+        await settingsPage
+          .locator("#speech")
+          .evaluate((section) => section.scrollIntoView({ block: "start" }));
+        const layout = await settingsPage.evaluate(() => {
+          const workspace = document.querySelector(".provider-workspace");
+          const workspaceRect = workspace?.getBoundingClientRect();
+          return {
+            noHorizontalOverflow:
+              document.documentElement.scrollWidth <=
+              document.documentElement.clientWidth,
+            workspaceContained:
+              workspaceRect !== undefined &&
+              workspaceRect.left >= 0 &&
+              workspaceRect.right <= document.documentElement.clientWidth,
+          };
+        });
+        expect(layout).toEqual({
+          noHorizontalOverflow: true,
+          workspaceContained: true,
+        });
+      }
+
+      await settingsPage
+        .locator("#privacy")
+        .evaluate((section) => section.scrollIntoView({ block: "start" }));
+      await expect(
+        settingsPage.getByRole("link", { name: "Privacy & diagnostics" }),
+      ).toHaveAttribute("aria-current", "location");
+      await capture(settingsPage, testInfo, "09-settings-mobile-footer");
       await settingsPage.close();
     });
+  } finally {
+    await context.close();
+  }
+});
+
+test("an already-open Options page enters pending first-run setup", async ({}, testInfo) => {
+  const testExtensionPath = prepareTestExtension(testInfo);
+  const context = await chromium.launchPersistentContext(
+    testInfo.outputPath("existing-options-profile"),
+    {
+      channel: "chromium",
+      headless: true,
+      viewport: { width: 1280, height: 800 },
+      args: [
+        `--disable-extensions-except=${testExtensionPath}`,
+        `--load-extension=${testExtensionPath}`,
+        "--mute-audio",
+      ],
+    },
+  );
+
+  try {
+    const worker = await extensionWorker(context);
+    const pages = context.pages();
+    const articlePage = pages[0] ?? (await context.newPage());
+    await articlePage.goto(articleUrl);
+    await articlePage.locator("article").click();
+
+    const optionsPagePromise = context.waitForEvent("page");
+    await worker.evaluate(() => chrome.runtime.openOptionsPage());
+    const optionsPage = await optionsPagePromise;
+    await expect(
+      optionsPage.getByRole("heading", { name: "Speech" }),
+    ).toBeVisible();
+
+    await articlePage.bringToFront();
+    await injectAndRequestExtraction(worker);
+    await articlePage.getByRole("button", { name: "Set up Speak-O" }).click();
+
+    await expect(
+      optionsPage.getByRole("heading", { name: "Choose a speech provider" }),
+    ).toBeVisible({ timeout: 2_000 });
   } finally {
     await context.close();
   }

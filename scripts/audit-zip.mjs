@@ -3,13 +3,14 @@ import path from "node:path";
 import { strFromU8, unzipSync } from "fflate";
 
 const outputDirectory = path.resolve(".output");
+const packageManifest = JSON.parse(await readFile("package.json", "utf8"));
 const requestedArtifact = process.argv[2];
 const artifact = requestedArtifact
   ? path.resolve(requestedArtifact)
   : path.join(
       outputDirectory,
-      (await readdir(outputDirectory)).find((name) =>
-        /^speak-o-0\.1\.0-chrome\.zip$/.test(name),
+      (await readdir(outputDirectory)).find(
+        (name) => name === `speak-o-${packageManifest.version}-chrome.zip`,
       ) ?? "",
     );
 if (!artifact.endsWith(".zip"))
@@ -42,7 +43,8 @@ const equalSet = (actual, expected) =>
 
 if (
   manifest.manifest_version !== 3 ||
-  manifest.minimum_chrome_version !== "124"
+  manifest.minimum_chrome_version !== "124" ||
+  manifest.version !== packageManifest.version
 ) {
   throw new Error("Manifest platform contract changed.");
 }
@@ -58,7 +60,7 @@ if (manifest.host_permissions || manifest.content_scripts) {
   );
 }
 if (manifest.incognito !== "not_allowed") {
-  throw new Error("Incognito must remain unavailable in 0.1.0.");
+  throw new Error("Incognito must remain unavailable in this release.");
 }
 if (
   manifest.content_security_policy?.extension_pages !==
@@ -70,7 +72,6 @@ if (
 for (const required of [
   "legal/LICENSE.txt",
   "legal/NOTICE.txt",
-  "legal/PRIVACY.txt",
   "legal/THIRD_PARTY_NOTICES.txt",
   "icon/16.png",
   "icon/32.png",

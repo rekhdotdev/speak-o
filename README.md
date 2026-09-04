@@ -6,7 +6,7 @@ Speak-O is an open-source, accountless Article Reader for Chrome 124+. It reads 
 
 ElevenLabs and Speechify Cloud Voice Modes connect directly to the user's account with a Bring Your Own Key Provider Credential. Browser Voice Mode uses a Voice exposed by Chrome or the operating system and needs no Provider Connection. A Browser Voice may use a remote service and is not guaranteed to be offline.
 
-## What 0.1.0 includes
+## What 1.0.0 includes
 
 - Explicit toolbar, keyboard, and Selection-context-menu activation
 - Selection-first extraction, a dedicated X Articles Site Adapter, and conservative generic Article extraction
@@ -64,7 +64,7 @@ The complete Chrome Web Store media set and upload notes are in [`store-assets/`
 
 Rekh receives no Article text, Provider Credential, Provider Usage, diagnostics, or behavioral data. Cloud Voice text is sent by the extension directly to the selected ElevenLabs API Region or Speechify API using that provider's credential. Preferences use local extension storage; remembered credentials are protected by Chrome profile storage rather than application-level encryption; active audio and alignment use session storage.
 
-Read [PRIVACY.md](PRIVACY.md), [the threat model](docs/threat-model.md), and [SECURITY.md](SECURITY.md).
+Read the [hosted privacy policy](https://rekh.dev/speak-o/privacy/), [the threat model](docs/threat-model.md), and [SECURITY.md](SECURITY.md).
 
 ## Project documentation
 
@@ -74,4 +74,4 @@ Read [PRIVACY.md](PRIVACY.md), [the threat model](docs/threat-model.md), and [SE
 - [Contribution guide](CONTRIBUTING.md)
 - [Apache-2.0 license](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md)
 
-Speak-O 0.1.0 is a public beta published by Rekh.
+Speak-O 1.0.0 is published by Rekh.

@@ -1,6 +1,6 @@
 # speak-o Chrome Web Store submission
 
-This directory is the handoff for submitting the `speak-o` 0.1.0 production build to the Chrome Web Store. It includes the upload package, Store screenshots, the required small promotional tile, and an optional marquee tile.
+This directory is the handoff for submitting the `speak-o` 1.0.0 production build to the Chrome Web Store. It includes the upload package, Store screenshots, the required small promotional tile, and an optional marquee tile.
 
 The dashboard copy below is aligned with the current extension build and the public pages that must be deployed before submitting:
 
@@ -26,13 +26,13 @@ The automated checks do not use live ElevenLabs or Speechify credentials and do 
 
 ## 1. Upload the package
 
-Open the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole), choose **Add new item**, choose the ZIP file, and upload:
+Open the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole), choose the existing Speak-O item, choose the ZIP file, and upload:
 
 ```text
-store-assets/speak-o-0.1.0-chrome.zip
+store-assets/speak-o-1.0.0-chrome.zip
 ```
 
-The ZIP is 224.57 kB and contains the production Manifest V3 build. The generated package has already passed the repository's permission, code-source, and sensitive-file audit.
+The ZIP is 223.83 kB and contains the production Manifest V3 build. The generated package passed the repository's permission, code-source, and sensitive-file audit.
 
 ## 2. Store Listing tab
 
@@ -207,12 +207,12 @@ Do not put an API key, password, private URL, personal page, or real account det
 ## 6. Save, review, and submit
 
 1. Save the Store Listing tab and check the preview at desktop and narrow widths.
-2. Save the Privacy tab and compare every answer against [`docs/store-permissions.md`](../docs/store-permissions.md) and [`PRIVACY.md`](../PRIVACY.md).
+2. Save the Privacy tab and compare every answer against [`docs/store-permissions.md`](../docs/store-permissions.md) and the [hosted privacy policy](https://rekh.dev/speak-o/privacy/).
 3. Save the Distribution tab.
 4. Save the Test instructions tab.
 5. Resolve any dashboard validation errors. Do not “fix” a warning by claiming that Speak-O collects no data; it handles Website Content and optional Authentication information as described above.
 6. Submit for review.
-7. If you want to coordinate the site launch, choose deferred publishing when the confirmation dialog offers it. The item ID is `kjamjfihhlhhnnkbknkfjinenbfmlkgl`; update and deploy the local `rekh.dev` checkout so the homepage's install action uses the final Store URL, then publish the approved item.
+7. The item ID is `kjamjfihhlhhnnkbknkfjinenbfmlkgl`; verify the public Store listing and Rekh links after the approved update is published.
 
 The official dashboard references are [Publish in the Chrome Web Store](https://developer.chrome.com/docs/webstore/publish/), [Complete your listing information](https://developer.chrome.com/docs/webstore/cws-dashboard-listing/), [Fill out the privacy fields](https://developer.chrome.com/docs/webstore/cws-dashboard-privacy), and [Prepare distribution](https://developer.chrome.com/docs/webstore/cws-dashboard-distribution/).
 
@@ -228,7 +228,7 @@ The official dashboard references are [Publish in the Chrome Web Store](https://
 | `screenshots/05-settings.png`         | Speech settings           | 1280 × 800 |
 | `promo-tile-440x280.png`              | Required small promo tile | 440 × 280  |
 | `marquee-1400x560.png`                | Optional marquee tile     | 1400 × 560 |
-| `speak-o-0.1.0-chrome.zip`            | Production package        | 224.57 kB  |
+| `speak-o-1.0.0-chrome.zip`            | Production package        | 223.60 kB  |
 
 The promotional PNGs are rendered from [`promo-tile.svg`](promo-tile.svg) and [`marquee.svg`](marquee.svg), so the artwork remains editable. The ZIP is a local handoff artifact and should not be treated as a source release.
 
@@ -241,4 +241,4 @@ npm run verify
 npm run test:e2e
 ```
 
-Refresh the screenshots from the current E2E output, render the SVG promotional sources to their declared PNG dimensions, and copy the newest `.output/speak-o-0.1.0-chrome.zip` here. Recheck that no credential, private page, live provider response, or test-only file entered the upload set.
+Refresh the screenshots from the current E2E output, render the SVG promotional sources to their declared PNG dimensions, and copy the newest `.output/speak-o-1.0.0-chrome.zip` here. Recheck that no credential, private page, live provider response, or test-only file entered the upload set.

@@ -1313,6 +1313,19 @@ export default defineBackground(() => {
     });
   };
 
+  const notifyOptionsOfPendingOnboarding = (pending: PendingOnboarding) => {
+    if (!pending.firstRun) return Promise.resolve(false);
+    return sendOptionalRuntimeMessage(
+      (runtimeMessage) => chrome.runtime.sendMessage(runtimeMessage),
+      {
+        version: 1,
+        target: "options",
+        type: "onboarding.requested",
+        narrationLanguage: pending.narrationLanguage,
+      },
+    );
+  };
+
   chrome.runtime.onConnect.addListener((port) => {
     if (
       port.name !== "speech-settings" ||
@@ -1474,6 +1487,16 @@ export default defineBackground(() => {
           await chrome.storage.session.set({
             [PENDING_ONBOARDING_KEY]: pending,
           });
+          try {
+            await notifyOptionsOfPendingOnboarding(pending);
+          } catch (error) {
+            emitDebug(
+              "background",
+              "onboarding.options-notify.error",
+              { error: summarizeDebugError(error) },
+              pending.target,
+            );
+          }
           await chrome.runtime.openOptionsPage();
         })();
       } else if (

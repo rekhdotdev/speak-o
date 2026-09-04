@@ -75,7 +75,7 @@ describe("redacted diagnostics", () => {
 
   it("reports extraction and provider metadata without prose, credentials, audio, or URLs", () => {
     const diagnostics = buildRedactedDiagnostics({
-      extensionVersion: "0.1.0",
+      extensionVersion: "1.0.0",
       extractor: "x-articles",
       extractionStage: "mapping",
       mappedBlockCount: 12,
@@ -91,7 +91,7 @@ describe("redacted diagnostics", () => {
     expect(diagnostics).toEqual({
       schemaVersion: 1,
       generatedAt: "2026-08-24T08:00:00.000Z",
-      extensionVersion: "0.1.0",
+      extensionVersion: "1.0.0",
       extractor: "x-articles",
       extractionStage: "mapping",
       mappedBlockCount: 12,

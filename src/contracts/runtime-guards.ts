@@ -293,6 +293,7 @@ export function isExtensionMessage(
       "content.debug.snapshot",
       "session.reconcile.request",
     ],
+    options: ["onboarding.requested"],
     offscreen: [
       "audio.play",
       "audio.pause",
@@ -302,6 +303,12 @@ export function isExtensionMessage(
     ],
   };
   if (allowedTypes[value.target]?.includes(value.type) !== true) return false;
+  if (value.target === "options" && value.type === "onboarding.requested") {
+    return (
+      validText(value.narrationLanguage, 35) &&
+      value.narrationLanguage.length > 0
+    );
+  }
   if (value.target === "background" && value.type === "session.command") {
     return isSessionCommandMessage(value);
   }

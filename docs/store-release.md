@@ -3,8 +3,8 @@
 ## Current release
 
 - Product name: speak-o
-- Version: 0.1.0
-- Store package: `store-assets/speak-o-0.1.0-chrome.zip` or the freshly generated `.output/speak-o-0.1.0-chrome.zip`
+- Version: 1.0.0
+- Store package: `store-assets/speak-o-1.0.0-chrome.zip` or the freshly generated `.output/speak-o-1.0.0-chrome.zip`
 - Chrome Web Store: `https://chromewebstore.google.com/detail/speak-o/kjamjfihhlhhnnkbknkfjinenbfmlkgl`
 - Homepage: `https://rekh.dev/speak-o/`
 - Privacy policy: `https://rekh.dev/speak-o/privacy/`
@@ -30,4 +30,4 @@ The automated checks do not use live ElevenLabs or Speechify credentials. Manual
 
 ## After upload
 
-The item ID is `kjamjfihhlhhnnkbknkfjinenbfmlkgl`. The Speak-O product page now points to the final Chrome Web Store URL. Deploy the site update, confirm the homepage/privacy/support links again, and then submit the item for review. Keep the submission deferred until the public page and final listing metadata have been checked if a coordinated launch is preferred.
+The item ID is `kjamjfihhlhhnnkbknkfjinenbfmlkgl`. Confirm the homepage, privacy, and support links again, then submit the update for review.

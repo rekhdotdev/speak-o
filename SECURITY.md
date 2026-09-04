@@ -10,7 +10,7 @@ Include the affected Speak-O version, Chrome version, operating system, minimal 
 
 ## Supported versions
 
-Speak-O is currently a public beta. Security fixes target the latest tagged release and `main`.
+Security fixes target the latest tagged release and `main`.
 
 ## Security boundary
 

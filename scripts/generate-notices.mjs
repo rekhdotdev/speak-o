@@ -60,7 +60,6 @@ await Promise.all([
   ...[
     ["LICENSE", "LICENSE.txt"],
     ["NOTICE", "NOTICE.txt"],
-    ["PRIVACY.md", "PRIVACY.txt"],
   ].map(async ([source, target]) =>
     writeFile(
       path.join(publicLegal, target),

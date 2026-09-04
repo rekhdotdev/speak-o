@@ -2,7 +2,7 @@
 
 ## Speak-O cannot run on this page
 
-Chrome blocks extensions on protected pages such as `chrome://` pages and the Chrome Web Store. PDF extraction and local file ingestion are outside 0.1.0. Open a normal `http` or `https` Article. If the page is not confidently an Article, select prose and use the Speak-O context menu.
+Chrome blocks extensions on protected pages such as `chrome://` pages and the Chrome Web Store. PDF extraction and local file ingestion are outside the current release. Open a normal `http` or `https` Article. If the page is not confidently an Article, select prose and use the Speak-O context menu.
 
 ## No readable Article found
 
